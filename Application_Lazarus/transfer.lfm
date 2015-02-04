@@ -1,0 +1,110 @@
+object FormTransfer: TFormTransfer
+  Left = 735
+  Height = 306
+  Top = 282
+  Width = 388
+  AllowDropFiles = True
+  Caption = 'FormTransfer'
+  ClientHeight = 306
+  ClientWidth = 388
+  OnCloseQuery = FormCloseQuery
+  OnCreate = FormCreate
+  OnDestroy = FormDestroy
+  OnDropFiles = FormDropFiles
+  LCLVersion = '1.1'
+  object LabelName: TLabel
+    Left = 8
+    Height = 15
+    Top = 8
+    Width = 21
+    Caption = 'File:'
+    ParentColor = False
+  end
+  object ProgressBarSize: TProgressBar
+    Left = 8
+    Height = 20
+    Top = 32
+    Width = 372
+    Anchors = [akTop, akLeft, akRight]
+    Max = 1000
+    TabOrder = 0
+  end
+  object ListViewFiles: TListView
+    Left = 8
+    Height = 175
+    Top = 88
+    Width = 372
+    Anchors = [akTop, akLeft, akRight, akBottom]
+    Columns = <    
+      item
+        Caption = 'File Name'
+        Width = 250
+      end    
+      item
+        Caption = 'Size'
+      end    
+      item
+        Caption = 'Status'
+      end>
+    MultiSelect = True
+    ReadOnly = True
+    RowSelect = True
+    TabOrder = 1
+    ViewStyle = vsReport
+  end
+  object ButtonStart: TButton
+    Left = 224
+    Height = 25
+    Top = 271
+    Width = 75
+    Anchors = [akRight, akBottom]
+    Caption = 'Start'
+    OnClick = ButtonStartClick
+    TabOrder = 2
+  end
+  object LabelSize: TLabel
+    Left = 8
+    Height = 15
+    Top = 64
+    Width = 66
+    Caption = 'Size: 0 / 0 KB'
+    ParentColor = False
+  end
+  object ButtonDel: TButton
+    Left = 144
+    Height = 25
+    Top = 271
+    Width = 75
+    Anchors = [akRight, akBottom]
+    Caption = 'Delete'
+    OnClick = ButtonDelClick
+    TabOrder = 3
+  end
+  object ButtonAdd: TButton
+    Left = 64
+    Height = 25
+    Top = 271
+    Width = 75
+    Anchors = [akRight, akBottom]
+    Caption = 'Add...'
+    OnClick = ButtonAddClick
+    TabOrder = 4
+  end
+  object ButtonStop: TButton
+    Left = 304
+    Height = 25
+    Top = 271
+    Width = 75
+    Anchors = [akRight, akBottom]
+    Caption = 'Stop'
+    OnClick = ButtonStopClick
+    TabOrder = 5
+  end
+  object OpenDialogSend: TOpenDialog
+    Title = 'Choose sending files'
+    Filter = 'All Files(*.*)|*.*'
+    Options = [ofAllowMultiSelect, ofEnableSizing, ofViewDetail]
+    left = 225
+    top = 164
+  end
+end
