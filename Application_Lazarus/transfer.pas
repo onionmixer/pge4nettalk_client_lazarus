@@ -206,7 +206,7 @@ begin
   if form = nil then exit;
   while true do
   begin
-    filename := form.GetDropFile;
+    filename := ''; //form.GetDropFile;
     if filename = '' then break;
     AddFile(filename);
   end;
@@ -342,4 +342,4 @@ begin
 end;
 
 end.
-
+

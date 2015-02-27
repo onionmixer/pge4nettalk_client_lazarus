@@ -4,19 +4,17 @@ object FormChat: TFormChat
   Top = 174
   Width = 419
   Caption = 'FormChat'
-  ClientHeight = 306
+  ClientHeight = 302
   ClientWidth = 419
   Menu = MainMenu1
   OnClose = FormClose
-  OnCreate = FormCreate
   OnDestroy = FormDestroy
-  OnDropFiles = FormDropFiles
   OnShow = FormShow
   Position = poDefaultPosOnly
   LCLVersion = '1.2.6.0'
   object RichView1: TRichView
     Left = 0
-    Height = 237
+    Height = 233
     Top = 0
     Width = 419
     TabStop = True
@@ -41,7 +39,7 @@ object FormChat: TFormChat
     Cursor = crVSplit
     Left = 0
     Height = 5
-    Top = 237
+    Top = 233
     Width = 419
     Align = alBottom
     ResizeAnchor = akBottom
@@ -49,7 +47,7 @@ object FormChat: TFormChat
   object Panel1: TPanel
     Left = 0
     Height = 64
-    Top = 242
+    Top = 238
     Width = 419
     Align = alBottom
     BevelOuter = bvNone
@@ -401,9 +399,9 @@ object FormChat: TFormChat
     top = 68
     object MenuItem1: TMenuItem
       Caption = '&File'
-      object MenuSendFile: TMenuItem
-        Caption = '&Send File...'
-        OnClick = MenuSendFileClick
+      object MenuInvite: TMenuItem
+        Caption = '&Invite...'
+        OnClick = MenuInviteClick
       end
       object MenuClose: TMenuItem
         Caption = '&Close'
@@ -411,4 +409,4 @@ object FormChat: TFormChat
       end
     end
   end
-end
+end

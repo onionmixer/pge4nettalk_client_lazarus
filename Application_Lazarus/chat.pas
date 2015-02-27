@@ -19,32 +19,28 @@ type
     Memo1: TMemo;
     MenuItem1: TMenuItem;
     MenuClose: TMenuItem;
-    MenuSendFile: TMenuItem;
+    MenuInvite: TMenuItem;
     Panel1: TPanel;
     RichView1: TRichView;
     RVStyle1: TRVStyle;
     Splitter1: TSplitter;
     procedure Button1Click(Sender: TObject);
     procedure FormClose(Sender: TObject; var CloseAction: TCloseAction);
-    procedure FormCreate(Sender: TObject);
     procedure FormDestroy(Sender: TObject);
-    procedure FormDropFiles(Sender: TObject; const FileNames: array of String);
     procedure FormShow(Sender: TObject);
     procedure Memo1KeyPress(Sender: TObject; var Key: char);
     procedure MenuCloseClick(Sender: TObject);
-    procedure MenuSendFileClick(Sender: TObject);
+    procedure MenuInviteClick(Sender: TObject);
     procedure RichView1KeyDown(Sender: TObject; var Key: Word;
       Shift: TShiftState);
   private
     { private declarations }
     FromID: String;
     TargetID: String;
-    fFileList: TStringList;
   public
     { public declarations }
     procedure SetUser(from, target: String);
     procedure RecvMsg(aMsg: String);
-    function GetDropFile: String;
   end;
 
 //var
@@ -77,30 +73,9 @@ begin
   CloseAction := caFree;
 end;
 
-procedure TFormChat.FormCreate(Sender: TObject);
-begin
-  fFileList := nil;
-end;
-
 procedure TFormChat.FormDestroy(Sender: TObject);
 begin
   FormMain.ChatClose(TargetID);
-  if fFileList <> nil then
-    fFileList.Free;
-end;
-
-procedure TFormChat.FormDropFiles(Sender: TObject;
-  const FileNames: array of String);
-var
-  i: Integer;
-begin
-  if fFileList = nil then exit;
-  if High(FileNames) < 0 then exit;
-  fFileList.Clear;
-  for i := 0 to High(FileNames) do
-    fFileList.Add(FileNames[i]);
-  if not FormMain.SendDropMsg(TargetID) then
-    MenuSendFileClick(Sender);
 end;
 
 procedure TFormChat.FormShow(Sender: TObject);
@@ -122,9 +97,12 @@ begin
   Close;
 end;
 
-procedure TFormChat.MenuSendFileClick(Sender: TObject);
+procedure TFormChat.MenuInviteClick(Sender: TObject);
+var
+  invite: String;
 begin
-  FormMain.SendMsg('FILEsnd|' + TargetID);
+  invite := InputBox('Invite', 'Invite user', '');
+  FormMain.SendMsg('INVT'+TargetID + '|' + invite);
 end;
 
 procedure TFormChat.RichView1KeyDown(Sender: TObject; var Key: Word;
@@ -141,11 +119,6 @@ begin
   FromID := from;
   TargetID := target;
   Caption := 'Talk To - ' + target;
-  if (TargetID[1] <> '$') and (TargetID[1] <> '#') then
-  begin
-    fFileList := TStringList.Create;
-    AllowDropFiles := True;
-  end;
 end;
 
 procedure TFormChat.RecvMsg(aMsg: String);
@@ -180,7 +153,7 @@ begin
     end
     else
     begin
-      textAlign := rvalRIght;
+      textAlign := rvalRight;
       Chat.Skin := FormMain.RightSkin;
       Chat.LeftSide := False;
     end;
@@ -200,6 +173,21 @@ begin
     RichView1.Invalidate;
     if not Showing then Show;
   end
+  else if (cmd = 'INVT') then
+  begin
+    cut := Pos('|', aMsg);
+    if cut = 0 then exit;
+    target := Copy(aMsg, 7, cut - 7);
+    Delete(aMsg, 1, cut);
+    from := aMsg;
+    aMsg := 'invite user ' + from;
+
+    RichView1.AddTextFromNewLine(aMsg, 0, rvalCenter);
+
+    RichView1.FormatTail;
+    RichView1.Invalidate;
+    if not Showing then Show;
+  end
   else
   begin
     Delete(aMsg, 1, 6);
@@ -211,15 +199,5 @@ begin
   end;
 end;
 
-function TFormChat.GetDropFile: String;
-begin
-  if fFileList.Count > 0 then
-  begin
-    Result := fFileList[0];
-    fFileList.Delete(0);
-  end else
-    Result := '';
-end;
-
 end.
-
+

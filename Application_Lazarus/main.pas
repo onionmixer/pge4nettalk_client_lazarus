@@ -49,6 +49,7 @@ type
     function Connected: Boolean;
     function ChatForm(User: String; Add: Boolean = True): TFormChat;
     procedure ChatClose(User: String);
+    procedure Join(Room: String; User:String);
     function SendForm(User: String; ID: String): TFormTransfer;
     procedure SendClose(User: String; ID: String);
     function SendDropMsg(User: String): Boolean;
@@ -155,7 +156,8 @@ procedure TFormMain.OnReceive(var Msg: TLMessage);
 var
   aMsg, cmd, sub: String;
   cut: Integer;
-  user, nick, group, status, image, id: String;
+  user, room, nick, group, status, image, id: String;
+  form: TFormChat;
 begin
   while true do
   begin
@@ -213,6 +215,28 @@ begin
         user := Copy(user, 1, cut - 1);
       end;
       ChatForm(user).RecvMsg(aMsg);
+    end
+    else if (cmd = 'JOIN') then
+    begin
+      cut := Pos('|', aMsg);
+      room := Copy(aMsg, 7, cut - 7);
+      Delete(aMsg, 1, cut);
+      user := aMsg;
+      Join(room, user);
+    end
+    else if (cmd = 'INVT') then
+    begin
+      cut := Pos('|', aMsg);
+      room := Copy(aMsg, 7, cut - 7);
+      user := Copy(aMsg, cut + 1, 32);
+      if user = fUser then
+        ChatForm(room).RecvMsg(aMsg)
+      else
+      begin
+        form := ChatForm(room, False);
+        if form <> nil then
+          form.RecvMsg(aMsg);
+      end;
     end
     else if (cmd = 'FILE') then
     begin
@@ -325,6 +349,22 @@ begin
   begin
     fChatUser.Delete(index);
     fChatForm.Delete(index);
+  end;
+  fFormSync.Leave;
+end;
+
+procedure TFormMain.Join(Room: String; User: String);
+var
+  index: Integer;
+  form: TFormChat;
+begin
+  fFormSync.Enter;
+  index := fChatUser.IndexOf(User);
+  if index <> -1 then
+  begin
+    form := fChatForm[index] as TFormChat;
+    form.SetUser(fUser, Room);
+    fChatUser[index] := Room;
   end;
   fFormSync.Leave;
 end;
