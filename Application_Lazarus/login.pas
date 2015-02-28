@@ -24,6 +24,7 @@ type
   public
     { public declarations }
     procedure Fail;
+    procedure Retry;
   end;
 
 var
@@ -59,5 +60,11 @@ begin
   ButtonLogin.Enabled := True;
 end;
 
-end.
+procedure TFormLogin.Retry;
+begin
+  if FormMain.Connected then
+    FormMain.SendMsg('AUTH' + EditID.Text + '|' + EditPassWord.Text);
+end;
 
+end.
+

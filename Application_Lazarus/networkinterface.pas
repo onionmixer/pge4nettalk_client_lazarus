@@ -9,6 +9,7 @@ uses
 
 const
   NI_RECEIVE = LM_USER + 101;
+  NI_STATUS = NI_RECEIVE + 1;
 
 type
 
@@ -154,7 +155,7 @@ end;
 
 procedure TNetworkInterface.notify(Status: TTwistedKnotStatus);
 begin
-
+  PostMessage(FormMain.Handle, NI_STATUS, Ord(Status), 0);
 end;
 
 procedure TNetworkInterface.sendStart(Sender: TTwistedKnotSender);

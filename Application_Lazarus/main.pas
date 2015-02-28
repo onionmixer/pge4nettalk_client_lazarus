@@ -20,6 +20,7 @@ type
     MenuItem1: TMenuItem;
     MenuExit: TMenuItem;
     MenuConnect: TMenuItem;
+    StatusBar1: TStatusBar;
     TreeView1: TTreeView;
     procedure FormCreate(Sender: TObject);
     procedure FormDestroy(Sender: TObject);
@@ -42,7 +43,8 @@ type
     fLeftSkin, fRightSkin, fSelectSkin: TChatSkin;
 
     procedure OnReceive(var Msg: TLMessage); message NI_RECEIVE;
-    procedure updateUserInfo(User, Nick, Group, Status, Image: String);
+    procedure OnStatus(var Msg: TLMessage); message NI_STATUS;
+    procedure UpdateUserInfo(User, Nick, Group, Status, Image: String);
   public
     { public declarations }
     procedure SendMsg(aMsg: string);
@@ -69,7 +71,7 @@ implementation
 
 {$R *.lfm}
 
-uses login;
+uses login, TwistedKnot;
 
 { TFormMain }
 
@@ -80,9 +82,12 @@ end;
 
 procedure TFormMain.MenuConnectClick(Sender: TObject);
 begin
-  if (fAuth) then
-    fCubeConn.Reconnect
-  else begin
+  if fAuth then
+  begin
+    SendMsg('QUIT');
+  end
+  else
+  begin
     fCubeConn.Connect;
     FormLogin.Show;
   end;
@@ -125,6 +130,7 @@ var
   i: Integer;
   Chat: TFormChat;
 begin
+  SendMsg('QUIT');
   fCubeConn.Free;
 
   for i := fChatForm.Count - 1 downto 0 do
@@ -176,8 +182,10 @@ begin
         TreeView1.Items.Clear;
       end
       else
+      begin
+        FormLogin.Show;
         FormLogin.Fail;
-      exit;
+      end;
     end
     else if (cmd = 'AUTH') then
     begin
@@ -288,11 +296,33 @@ begin
   end;
 end;
 
-procedure TFormMain.updateUserInfo(User, Nick, Group, Status, Image: String);
+procedure TFormMain.OnStatus(var Msg: TLMessage);
+var
+  status: TTwistedKnotStatus;
+begin
+  status := TTwistedKnotStatus(Msg.WParam);
+
+  if status = TwistedKnotStatusDisconnect then
+    StatusBar1.Panels[0].Text := 'Disconnected'
+  else
+    StatusBar1.Panels[0].Text := 'Connected';
+
+  if status = TwistedKnotStatusConnect then
+  begin
+    if fAuth then
+       FormLogin.Retry;
+  end;
+end;
+
+procedure TFormMain.UpdateUserInfo(User, Nick, Group, Status, Image: String);
 var
   node: TTreeNode;
+  userNode: TTreeNode;
   newGroup: Boolean;
 begin
+  if (User = '') or (Group = '') then
+    exit;
+
   newGroup := False;
   node := TreeView1.Items.FindTopLvlNode(group);
   if node = nil then
@@ -301,9 +331,21 @@ begin
     node := TreeView1.Items.Add(nil, group);
   end;
 
-  TreeView1.Items.AddChild(node, user);
+  userNode := node.FindNode(user);
+
+  if userNode = nil then
+    TreeView1.Items.AddChild(node, user)
+  else
+  begin
+    if Nick = '' then
+    begin
+      userNode.Delete;
+    end;
+  end;
+
   if newGroup then
     node.Expand(True);
+  TreeView1.AlphaSort;
 end;
 
 procedure TFormMain.OnDebug(Sender: TObject; aMsg: String);

@@ -12,7 +12,7 @@ object FormMain: TFormMain
   LCLVersion = '1.2.6.0'
   object TreeView1: TTreeView
     Left = 0
-    Height = 372
+    Height = 353
     Top = 27
     Width = 269
     Align = alClient
@@ -32,6 +32,18 @@ object FormMain: TFormMain
     ItemHeight = 0
     TabOrder = 1
     Text = 'ComboBox1'
+  end
+  object StatusBar1: TStatusBar
+    Left = 0
+    Height = 19
+    Top = 380
+    Width = 269
+    Panels = <    
+      item
+        Text = 'Not connected'
+        Width = 50
+      end>
+    SimplePanel = False
   end
   object MainMenu1: TMainMenu
     left = 120
