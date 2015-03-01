@@ -666,6 +666,12 @@ end;
 
 procedure TTwistedKnotConnection.HandleWrite;
 
+function getShort(const Input: Pointer): Word;
+begin
+  Move(Input^, result, 2);
+  result := ntohs(result);
+end;
+
 procedure putShort(Dest: Pointer; Value: Word);
 begin
   Value := htons(Value);
@@ -716,7 +722,7 @@ begin
       fControlPacket.Delete(0);
       fSection.Release;
 
-      packetLength := 32;
+      packetLength := GetShort(packet + 2);
     end
     else if fSenderQueue.Count > 0 then
     begin
@@ -795,6 +801,10 @@ begin
   Move(Value, Dest^, 4);
 end;
 
+{$IFDEF UNIX}
+const
+  dummy: Char = 'x';
+{$ENDIF}
 var
   packet: PByte;
 begin
@@ -813,6 +823,18 @@ begin
   fSection.Acquire;
   fControlPacket.Add(packet);
   fSection.Release;
+
+  if fConnected then
+  begin
+    {$IFDEF WINDOWS}
+    if (fDummy > 0) then
+      CloseSocket(fDummy);
+    fDummy := -1;
+    {$ENDIF}
+    {$IFDEF UNIX}
+    fpWrite(fWrite, dummy, 1);
+    {$ENDIF}
+  end;
 end;
 
 {$IFDEF WINDOWS}
@@ -1072,6 +1094,10 @@ begin
   Move(Value, Dest^, 4);
 end;
 
+{$IFDEF UNIX}
+const
+  dummy: Char = 'x';
+{$ENDIF}
 var
   packet: PByte;
 begin
@@ -1086,6 +1112,18 @@ begin
   fSection.Acquire;
   fControlPacket.Add(packet);
   fSection.Release;
+
+  if fConnected then
+  begin
+    {$IFDEF WINDOWS}
+    if (fDummy > 0) then
+      CloseSocket(fDummy);
+    fDummy := -1;
+    {$ENDIF}
+    {$IFDEF UNIX}
+    fpWrite(fWrite, dummy, 1);
+    {$ENDIF}
+  end;
 end;
 
 procedure TTwistedKnotConnection.Send(Data: Pointer; Len: Integer;

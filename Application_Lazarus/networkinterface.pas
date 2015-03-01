@@ -85,7 +85,7 @@ begin
   begin
     if Assigned(fConnection) then
     begin
-      if SecondsBetween(Now, fConnection.LastReceived) > 10 then
+      if SecondsBetween(Now, fConnection.LastReceived) > 60 then
         fConnection.Connect
       else
         fConnection.Ping;
