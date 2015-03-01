@@ -18,6 +18,7 @@ type
   TNetworkInterface = class(TTwistedKnot)
   private
     fConnection: TTwistedKnotConnection;
+    fKeepAlive: TThread;
     fLastUniqueID: DWord;
     fSection: TCriticalSection;
     fReceivers: TObjectList;
@@ -49,7 +50,7 @@ type
 implementation
 
 uses
-  main;
+  main, DateUtils;
 
 const
   PublicKey =
@@ -60,6 +61,46 @@ const
   ServerHost = 'lookandwalk.com';
   //ServerHost = '10.0.2.2';
   ServerPort = 4430;
+
+type
+
+  { TKeepAliveThread }
+
+  TKeepAliveThread = class(TThread)
+  private
+    fConnection: TTwistedKnotConnection;
+  protected
+    procedure Execute; override;
+  public
+    constructor Create;
+
+    property Connection: TTwistedKnotConnection write fConnection;
+  end;
+
+{ TKeepAliveThread }
+
+procedure TKeepAliveThread.Execute;
+begin
+  while not Terminated do
+  begin
+    if Assigned(fConnection) then
+    begin
+      if SecondsBetween(Now, fConnection.LastReceived) > 10 then
+        fConnection.Connect
+      else
+        fConnection.Ping;
+    end;
+
+    Sleep(3000);
+  end;
+end;
+
+constructor TKeepAliveThread.Create;
+begin
+  inherited Create(True);
+  FreeOnTerminate := True;
+  fConnection := nil;
+end;
 
 { TNetworkInterface }
 
@@ -78,13 +119,20 @@ begin
   fConnection.PublicKey := PublicKey;
   fConnection.Address := ServerHost;
   fConnection.Port := ServerPort;
-  fConnection.DefaultHandler := self;
+  fConnection.Handler := self;
   fConnection.Start;
+
+  fKeepAlive := TKeepAliveThread.Create;
+  (fKeepAlive as TKeepAliveThread).Connection := fConnection;
+  fKeepAlive.Start;
 end;
 
 destructor TNetworkInterface.Destroy;
 begin
-  fConnection.DefaultHandler := nil;
+  (fKeepAlive as TKeepAliveThread).Connection := nil;
+  fKeepAlive.Terminate;
+
+  fConnection.Handler := nil;
   fConnection.Terminate;
   fConnection.Close;
   fConnection := nil;
@@ -118,13 +166,12 @@ end;
 procedure TNetworkInterface.send(Data: Pointer; Len: Integer; UniqueID,
   toAddress: DWord);
 begin
-  fConnection.Send(Data, Len, UniqueID, toAddress, nil);
+  fConnection.Send(Data, Len, UniqueID, toAddress);
 end;
 
 function TNetworkInterface.getMessage: String;
 var
   Receiver: TTwistedKnotReceiver;
-  data: String;
 begin
   Result := '';
   Receiver := nil;

@@ -52,7 +52,6 @@ type
     fAddress: String;
     fPort: Integer;
     fHandler: TTwistedKnot;
-    fHandlers: TFPObjectHashTable;
 
     fConnected: Boolean;
     fHandshaked: Boolean;
@@ -66,6 +65,7 @@ type
     fReadBuffer: array[0..TwistedKnotPacketLength - 1] of Byte;
     fReadPosition: Integer;
     fPacketLength: Integer;
+    fLastReceived: TDateTime;
 
     fSenders: TFPObjectHashTable;
     fSenderQueue: TObjectList;
@@ -97,8 +97,7 @@ type
     destructor Destroy; override;
 
     procedure Ping;
-    procedure Send(Data: Pointer; Len: Integer; UniqueID, toAddress:DWord;
-      handler:TTwistedKnot);
+    procedure Send(Data: Pointer; Len: Integer; UniqueID, toAddress:DWord);
 
     procedure Connect;
     procedure Close;
@@ -108,7 +107,8 @@ type
     property Port: Integer read fPort write fPort;
     property Connected: Boolean read fConnected;
     property Handshaked: Boolean read fHandshaked;
-    property DefaultHandler: TTwistedKnot read fHandler write fHandler;
+    property Handler: TTwistedKnot read fHandler write fHandler;
+    property LastReceived: TDateTime read fLastReceived;
   end;
   
   { TTwistedKnotSender }
@@ -427,7 +427,6 @@ var
   packetType: TPacketType;
   checksum, crc: DWord;
   key: String;
-  handler: TTwistedKnot;
   receiver: TTwistedKnotReceiver;
   sender: TTwistedKnotSender;
 
@@ -437,6 +436,8 @@ var
   status: TTwistedKnotStatus;
 
 begin
+  fLastReceived := Now;
+
   while not Terminated and not fStop and not fRetry do
   begin
     i := Sockets.fpRecv(fSocket, @fReadBuffer[fReadPosition],
@@ -498,13 +499,8 @@ begin
         streamLength := getLong(decrypt[20]);
         uniqueID := getLong(decrypt[24]);
 
-        key := IntToStr(from) + ':' + IntToStr(uniqueID);
-        handler := TTwistedKnot(fHandlers.Items[key]);
-        if handler = nil then
-          handler := fHandler;
-
-        if handler <> nil then
-          query := handler.canReceive(uniqueID, from, streamLength)
+        if Assigned(fHandler) then
+          query := fHandler.canReceive(uniqueID, from, streamLength)
         else
           query := True;
 
@@ -513,8 +509,8 @@ begin
           receiver := TTwistedKnotReceiver.Create(streamLength, streamID,
             uniqueID, from);
 
-          if handler <> nil then
-            handler.receiveStart(receiver);
+          if Assigned(fHandler) then
+            fHandler.receiveStart(receiver);
 
           key := IntToStr(from) + ':' + IntToStr(streamID);
           fReceivers.Add(key, receiver);
@@ -542,13 +538,8 @@ begin
         begin
           fReceivers.Delete(key);
 
-          key := IntToStr(from) + ':' + IntToStr(receiver.UniqueID);
-          handler := TTwistedKnot(fHandlers.Items[key]);
-          if handler = nil then handler:= fHandler;
-          fHandlers.Delete(key);
-
-          if handler <> nil then
-            handler.receiveCompleted(receiver)
+          if Assigned(fHandler) then
+            fHandler.receiveCompleted(receiver)
           else
             receiver.Free;
         end;
@@ -569,12 +560,8 @@ begin
         begin
           fSenders.Delete(key);
 
-          key := IntToStr(sender.toAddress) + ':' + IntToStr(sender.UniqueID);
-          handler := TTwistedKnot(fHandlers.Items[key]);
-          if handler = nil then handler:= fHandler;
-
-          if handler <> nil then
-            handler.sendCompleted(sender)
+          if Assigned(fHandler) then
+            fHandler.sendCompleted(sender)
           else
             sender.Free;
         end;
@@ -597,12 +584,8 @@ begin
 
         if sender.Status = TwistedKnotStreamReady then
         begin
-          key := IntToStr(sender.toAddress) + ':' + IntToStr(sender.UniqueID);
-          handler := TTwistedKnot(fHandlers.Items[key]);
-          if handler = nil then handler:= fHandler;
-
-          if handler <> nil then
-            handler.sendStart(sender);
+          if Assigned(fHandler) then
+            fHandler.sendStart(sender);
         end;
       end
       else if packetType = PacketTypePause then
@@ -633,13 +616,8 @@ begin
 
         fSenders.Delete(key);
 
-        key := IntToStr(sender.toAddress) + ':' + IntToStr(sender.UniqueID);
-        handler := TTwistedKnot(fHandlers.Items[key]);
-        if handler = nil then handler:= fHandler;
-        fHandlers.Delete(key);
-
-        if handler <> nil then
-          handler.sendCompleted(sender)
+        if Assigned(fHandler) then
+          fHandler.sendCompleted(sender)
         else
           sender.Free;
 
@@ -673,7 +651,6 @@ begin
           fSenders.Clear;
           fSenderQueue.Clear;
           fControlPacket.Clear;
-          fHandlers.Clear;
 
           status := TwistedKnotStatusConnect;
         end else begin
@@ -894,6 +871,7 @@ begin
     delay := 0;
     fStop := False;
     fConnected := False;
+    fLastReceived := Now;
 
     while not Terminated and not fStop do
     begin
@@ -1041,7 +1019,6 @@ begin
   FreeOnTerminate := True;
 
   fHandler := nil;
-  fHandlers := TFPObjectHashTable.Create(False);
 
   fConnected := False;
   fHandshaked := False;
@@ -1053,6 +1030,7 @@ begin
 
   fReceivers := TFPObjectHashTable.Create(False);
   fPacketLength := 16;
+  fLastReceived := Now;
 
   fSenders := TFPObjectHashTable.Create(False);
   fSenderQueue := TObjectList.Create(False);
@@ -1070,7 +1048,6 @@ begin
   Close;
   while fConnected do Sleep(1);
 
-  fHandlers.Free;
   fReceivers.Free;
   fSenders.Free;
   fSenderQueue.Free;
@@ -1112,7 +1089,7 @@ begin
 end;
 
 procedure TTwistedKnotConnection.Send(Data: Pointer; Len: Integer;
-  UniqueID, toAddress:DWord; handler:TTwistedKnot);
+  UniqueID, toAddress:DWord);
 {$IFDEF UNIX}
 const
   dummy: Char = 'x';
@@ -1134,9 +1111,6 @@ begin
   key := IntToStr(toAddress) + ':' + IntToStr(StreamID);
   fSenders.Add(key, sender);
   fSection.Release;
-
-  key := IntToStr(toAddress) + ':' + IntToStr(UniqueID);
-  fHandlers.Add(key, handler);
 
   sendControlPacket(Ord(PacketTypeStreamInfo), toAddress, streamID, Len,
     uniqueID);
@@ -1400,4 +1374,4 @@ begin
   Result := True;
 end;
 
-end.
+end.
