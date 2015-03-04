@@ -320,28 +320,25 @@ var
   userNode: TTreeNode;
   newGroup: Boolean;
 begin
-  if (User = '') or (Group = '') then
+  if (User = '') or (Nick = '') or (Group = '') then
     exit;
 
   newGroup := False;
   node := TreeView1.Items.FindTopLvlNode(group);
   if node = nil then
   begin
+    if (Status = 'offline') then
+      exit;
     newGroup := True;
     node := TreeView1.Items.Add(nil, group);
   end;
 
   userNode := node.FindNode(user);
 
-  if userNode = nil then
+  if (userNode = nil) and (Status <> 'offline') then
     TreeView1.Items.AddChild(node, user)
-  else
-  begin
-    if Nick = '' then
-    begin
-      userNode.Delete;
-    end;
-  end;
+  else if (userNode <> nil) And (Status = 'offline') then
+    userNode.Delete;
 
   if newGroup then
     node.Expand(True);
