@@ -42,7 +42,8 @@ procedure TFormLogin.ButtonLoginClick(Sender: TObject);
 begin
   if FormMain.Connected then
   begin
-    FormMain.SendMsg('AUTH' + EditID.Text + '|' + EditPassWord.Text);
+    FormMain.SignIn(EditID.Text, EditPassword.Text);
+    //FormMain.SendMsg('AUTH' + EditID.Text + '|' + EditPassWord.Text);
     ButtonLogin.Enabled := False;
   end
   else

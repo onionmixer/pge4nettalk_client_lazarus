@@ -43,10 +43,13 @@ type
     fLeftSkin, fRightSkin, fSelectSkin: TChatSkin;
 
     procedure OnReceive(var Msg: TLMessage); message NI_RECEIVE;
+    procedure OnTalkTo(aMsg: String);
+    procedure OnSession(aMsg: String);
     procedure OnStatus(var Msg: TLMessage); message NI_STATUS;
     procedure UpdateUserInfo(User, Nick, Group, Status, Image: String);
   public
     { public declarations }
+    procedure SignIn(User: String; Password: String);
     procedure SendMsg(aMsg: string);
     function Connected: Boolean;
     function ChatForm(User: String; Add: Boolean = True): TFormChat;
@@ -71,7 +74,7 @@ implementation
 
 {$R *.lfm}
 
-uses login, TwistedKnot;
+uses login, TwistedKnot, Session;
 
 { TFormMain }
 
@@ -160,10 +163,8 @@ end;
 
 procedure TFormMain.OnReceive(var Msg: TLMessage);
 var
-  aMsg, cmd, sub: String;
-  cut: Integer;
-  user, room, nick, group, status, image, id: String;
-  form: TFormChat;
+  aMsg: String;
+  service: Word;
 begin
   while true do
   begin
@@ -171,127 +172,158 @@ begin
     if (aMsg = '') then
       break;
 
-    cmd := Copy(aMsg, 3, 4);
-    if (cmd = 'QUIT') then
-    begin
-      if fAuth then
-      begin
-        fAuth := False;
-        Caption := 'Talk To';
-        MenuConnect.Caption := '&Connect...';
-        TreeView1.Items.Clear;
-      end
-      else
-      begin
-        FormLogin.Show;
-        FormLogin.Fail;
-      end;
-    end
-    else if (cmd = 'AUTH') then
-    begin
-      fAuth := True;
-      fUser := Copy(aMsg, 7, 32);
-      Caption := 'Talk To - ' + fUser;
-      MenuConnect.Caption := 'Dis&connect';
-      FormLogin.Hide;
-    end
-    else if (cmd = 'STAT') then
-    begin
-      cut := Pos('|', aMsg);
-      user := Copy(aMsg, 7, cut - 7);
-      Delete(aMsg, 1, cut);
-      cut := Pos('|', aMsg);
-      nick := Copy(aMsg, 1, cut - 1);
-      Delete(aMsg, 1, cut);
-      cut := Pos('|', aMsg);
-      group := Copy(aMsg, 1, cut - 1);
-      Delete(aMsg, 1, cut);
-      cut := Pos('|', aMsg);
-      status := Copy(aMsg, 1, cut - 1);
-      Delete(aMsg, 1, cut);
-      image := aMsg;
-      updateUserInfo(user, nick, group, status, image);
-    end
-    else if (cmd = 'MESG') then
-    begin
-      cut := Pos('|', aMsg);
-      user := Copy(aMsg, 7, cut - 7);
-      if user = fUser then
-      begin
-        user := Copy(aMsg, cut + 1, 32);
-        cut := Pos('|', user);
-        user := Copy(user, 1, cut - 1);
-      end;
-      ChatForm(user).RecvMsg(aMsg);
-    end
-    else if (cmd = 'JOIN') then
-    begin
-      cut := Pos('|', aMsg);
-      room := Copy(aMsg, 7, cut - 7);
-      Delete(aMsg, 1, cut);
-      user := aMsg;
-      Join(room, user);
-    end
-    else if (cmd = 'INVT') then
-    begin
-      cut := Pos('|', aMsg);
-      room := Copy(aMsg, 7, cut - 7);
-      user := Copy(aMsg, cut + 1, 32);
-      if user = fUser then
-        ChatForm(room).RecvMsg(aMsg)
-      else
-      begin
-        form := ChatForm(room, False);
-        if form <> nil then
-          form.RecvMsg(aMsg);
-      end;
-    end
-    else if (cmd = 'FILE') then
-    begin
-      OnDebug(Self, aMsg);
-      sub := Copy(aMsg, 7, 3);
-      Delete(aMsg, 1, 10);
-      cut := Pos('|', aMsg);
-      if cut = 0 then cut := Length(aMsg) + 1;
-      user := Copy(aMsg, 1, cut - 1);
-      Delete(aMsg, 1, cut);
-      cut := Pos('|', aMsg);
-      if cut = 0 then cut := Length(aMsg) + 1;
-      id := Copy(aMsg, 1, cut - 1);
-      Delete(aMsg, 1, cut);
+    service := (Ord(aMsg[1]) shl 8) or Ord(aMsg[2]);
+    if service = SessionID then
+      OnSession(aMsg)
+    else if service = $5454 then
+      OnTalkTo(aMsg);
+  end;
+end;
 
-      if sub = 'snd' then
-      begin
-        SendForm(user, id);
-      end
-      else if sub = 'req' then
-      begin
-        RecvForm(user, id);
-      end
-      else if sub = 'rej' then
-      begin
-        SendClose(user, id);
-      end
-      else if sub = 'abt' then
-      begin
-        RecvClose(user, id);
-      end
-      else if sub = 'acs' then
-      begin
-        SendForm(user, id).Connect(aMsg);
-      end
-      else if sub = 'acr' then
-      begin
-        RecvForm(user, id).Connect(aMsg);
-      end
-      else if sub = 'rcv' then
-      begin
-        RecvForm(user, id).Recv(aMsg);
-      end;
+procedure TFormMain.OnTalkTo(aMsg: String);
+var
+  cmd, sub: String;
+  cut: Integer;
+  user, room, nick, group, status, image, id: String;
+  form: TFormChat;
+begin
+  cmd := Copy(aMsg, 3, 4);
+  if (cmd = 'QUIT') then
+  begin
+    if fAuth then
+    begin
+      fAuth := False;
+      Caption := 'Talk To';
+      MenuConnect.Caption := '&Connect...';
+      TreeView1.Items.Clear;
     end
     else
     begin
-      //FormChat.RecvMsg(aMsg);
+      FormLogin.Show;
+      FormLogin.Fail;
+    end;
+  end
+  else if (cmd = 'AUTH') then
+  begin
+    fAuth := True;
+    fUser := Copy(aMsg, 7, 32);
+    Caption := 'Talk To - ' + fUser;
+    MenuConnect.Caption := 'Dis&connect';
+    FormLogin.Hide;
+  end
+  else if (cmd = 'STAT') then
+  begin
+    cut := Pos('|', aMsg);
+    user := Copy(aMsg, 7, cut - 7);
+    Delete(aMsg, 1, cut);
+    cut := Pos('|', aMsg);
+    nick := Copy(aMsg, 1, cut - 1);
+    Delete(aMsg, 1, cut);
+    cut := Pos('|', aMsg);
+    group := Copy(aMsg, 1, cut - 1);
+    Delete(aMsg, 1, cut);
+    cut := Pos('|', aMsg);
+    status := Copy(aMsg, 1, cut - 1);
+    Delete(aMsg, 1, cut);
+    image := aMsg;
+    updateUserInfo(user, nick, group, status, image);
+  end
+  else if (cmd = 'MESG') then
+  begin
+    cut := Pos('|', aMsg);
+    user := Copy(aMsg, 7, cut - 7);
+    if user = fUser then
+    begin
+      user := Copy(aMsg, cut + 1, 32);
+      cut := Pos('|', user);
+      user := Copy(user, 1, cut - 1);
+    end;
+    ChatForm(user).RecvMsg(aMsg);
+  end
+  else if (cmd = 'JOIN') then
+  begin
+    cut := Pos('|', aMsg);
+    room := Copy(aMsg, 7, cut - 7);
+    Delete(aMsg, 1, cut);
+    user := aMsg;
+    Join(room, user);
+  end
+  else if (cmd = 'INVT') then
+  begin
+    cut := Pos('|', aMsg);
+    room := Copy(aMsg, 7, cut - 7);
+    user := Copy(aMsg, cut + 1, 32);
+    if user = fUser then
+      ChatForm(room).RecvMsg(aMsg)
+    else
+    begin
+      form := ChatForm(room, False);
+      if form <> nil then
+        form.RecvMsg(aMsg);
+    end;
+  end
+  else if (cmd = 'FILE') then
+  begin
+    OnDebug(Self, aMsg);
+    sub := Copy(aMsg, 7, 3);
+    Delete(aMsg, 1, 10);
+    cut := Pos('|', aMsg);
+    if cut = 0 then cut := Length(aMsg) + 1;
+    user := Copy(aMsg, 1, cut - 1);
+    Delete(aMsg, 1, cut);
+    cut := Pos('|', aMsg);
+    if cut = 0 then cut := Length(aMsg) + 1;
+    id := Copy(aMsg, 1, cut - 1);
+    Delete(aMsg, 1, cut);
+
+    if sub = 'snd' then
+    begin
+      SendForm(user, id);
+    end
+    else if sub = 'req' then
+    begin
+      RecvForm(user, id);
+    end
+    else if sub = 'rej' then
+    begin
+      SendClose(user, id);
+    end
+    else if sub = 'abt' then
+    begin
+      RecvClose(user, id);
+    end
+    else if sub = 'acs' then
+    begin
+      SendForm(user, id).Connect(aMsg);
+    end
+    else if sub = 'acr' then
+    begin
+      RecvForm(user, id).Connect(aMsg);
+    end
+    else if sub = 'rcv' then
+    begin
+      RecvForm(user, id).Recv(aMsg);
+    end;
+  end
+  else
+  begin
+    //FormChat.RecvMsg(aMsg);
+  end;
+end;
+
+procedure TFormMain.OnSession(aMsg: String);
+var
+  response: TSession;
+begin
+  response := TSession.Create(PChar(aMsg), Length(aMsg));
+  if response.functionID = SessionFunctionIDSignIn then
+  begin
+    if response.errorCode = SessionErrorCodeNone then
+      SendMsg('AUTH')
+    else
+    begin
+      FormLogin.Show;
+      FormLogin.Fail;
     end;
   end;
 end;
@@ -343,6 +375,26 @@ begin
   if newGroup then
     node.Expand(True);
   TreeView1.AlphaSort;
+end;
+
+procedure TFormMain.SignIn(User: String; Password: String);
+var
+  request: TSession;
+  data: Pointer;
+  size: DWord;
+begin
+  request := TSession.Create;
+  request.functionID := SessionFunctionIDSignIn;
+  request.errorCode := SessionErrorCodeNone;
+  request.args := TStringList.Create;
+  request.args.Add(User);
+  request.args.Add(Password);
+  request.args.Add('user');
+
+  data := request.getData(size);
+  fCubeConn.send(data, size, fCubeConn.getUniqueID, SessionID);
+
+  request.Free;
 end;
 
 procedure TFormMain.OnDebug(Sender: TObject; aMsg: String);
