@@ -51,8 +51,12 @@ object FormMain: TFormMain
     object MenuItem1: TMenuItem
       Caption = '&File'
       object MenuConnect: TMenuItem
-        Caption = '&Connect'
+        Caption = '&Connect...'
         OnClick = MenuConnectClick
+      end
+      object MenuItemFileList: TMenuItem
+        Caption = '&File List...'
+        OnClick = MenuItemFileListClick
       end
       object MenuExit: TMenuItem
         Caption = 'E&xit'
@@ -501,5 +505,9 @@ object FormMain: TFormMain
       0000000000000000000000000000000000000000000000000000000000000000
       000000000000000000000000000000000000
     }
+  end
+  object SaveDialog1: TSaveDialog
+    left = 200
+    top = 40
   end
 end

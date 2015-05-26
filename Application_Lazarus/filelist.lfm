@@ -1,0 +1,65 @@
+object FormFileList: TFormFileList
+  Left = 557
+  Height = 240
+  Top = 190
+  Width = 320
+  Caption = 'File List'
+  ClientHeight = 240
+  ClientWidth = 320
+  LCLVersion = '1.2.6.0'
+  object ListView1: TListView
+    Left = 8
+    Height = 190
+    Top = 8
+    Width = 304
+    Anchors = [akTop, akLeft, akRight, akBottom]
+    Columns = <    
+      item
+        Caption = 'Name'
+        Width = 150
+      end    
+      item
+        Caption = 'Size'
+      end    
+      item
+        Caption = 'Expire'
+        Width = 84
+      end>
+    TabOrder = 0
+    ViewStyle = vsReport
+  end
+  object ButtonUpload: TButton
+    Left = 80
+    Height = 25
+    Top = 208
+    Width = 75
+    Anchors = [akRight, akBottom]
+    Caption = 'Upload'
+    OnClick = ButtonUploadClick
+    TabOrder = 1
+  end
+  object ButtonDelete: TButton
+    Left = 160
+    Height = 25
+    Top = 208
+    Width = 75
+    Anchors = [akRight, akBottom]
+    Caption = 'Delete'
+    OnClick = ButtonDeleteClick
+    TabOrder = 2
+  end
+  object ButtonRefresh: TButton
+    Left = 240
+    Height = 25
+    Top = 208
+    Width = 75
+    Anchors = [akRight, akBottom]
+    Caption = 'Refresh'
+    OnClick = ButtonRefreshClick
+    TabOrder = 3
+  end
+  object OpenDialog1: TOpenDialog
+    left = 127
+    top = 94
+  end
+end

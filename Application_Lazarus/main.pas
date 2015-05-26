@@ -20,12 +20,15 @@ type
     MenuItem1: TMenuItem;
     MenuExit: TMenuItem;
     MenuConnect: TMenuItem;
+    MenuItemFileList: TMenuItem;
+    SaveDialog1: TSaveDialog;
     StatusBar1: TStatusBar;
     TreeView1: TTreeView;
     procedure FormCreate(Sender: TObject);
     procedure FormDestroy(Sender: TObject);
     procedure MenuExitClick(Sender: TObject);
     procedure MenuConnectClick(Sender: TObject);
+    procedure MenuItemFileListClick(Sender: TObject);
     procedure TreeView1DblClick(Sender: TObject);
   private
     { private declarations }
@@ -45,12 +48,14 @@ type
     procedure OnReceive(var Msg: TLMessage); message NI_RECEIVE;
     procedure OnTalkTo(aMsg: String);
     procedure OnSession(aMsg: String);
+    procedure OnCargoCompany(aMsg: String);
     procedure OnStatus(var Msg: TLMessage); message NI_STATUS;
     procedure UpdateUserInfo(User, Nick, Group, Status, Image: String);
   public
     { public declarations }
     procedure SignIn(User: String; Password: String);
     procedure SendMsg(aMsg: string);
+    procedure SendData(data: Pointer; size, toAddress: DWord);
     function Connected: Boolean;
     function ChatForm(User: String; Add: Boolean = True): TFormChat;
     procedure ChatClose(User: String);
@@ -74,7 +79,9 @@ implementation
 
 {$R *.lfm}
 
-uses login, TwistedKnot, Session;
+uses
+  login, filelist, DateUtils, LazUTF8Classes,
+  TwistedKnot, Session, CargoCompany;
 
 { TFormMain }
 
@@ -94,6 +101,12 @@ begin
     fCubeConn.Connect;
     FormLogin.Show;
   end;
+end;
+
+procedure TFormMain.MenuItemFileListClick(Sender: TObject);
+begin
+  FormFileList.Show;
+  FormFileList.ButtonRefreshClick(nil);
 end;
 
 procedure TFormMain.FormCreate(Sender: TObject);
@@ -176,7 +189,9 @@ begin
     if service = SessionID then
       OnSession(aMsg)
     else if service = $5454 then
-      OnTalkTo(aMsg);
+      OnTalkTo(aMsg)
+    else if service = CargoCompanyID then
+      OnCargoCompany(aMsg);
   end;
 end;
 
@@ -326,6 +341,91 @@ begin
       FormLogin.Fail;
     end;
   end;
+end;
+
+procedure TFormMain.OnCargoCompany(aMsg: String);
+var
+  cargo: TCargoCompany;
+  fsOut: TFileStreamUTF8;
+  list: TListView;
+  item: TListItem;
+  i: Integer;
+  size: DWord;
+  seq, filename, sizestr, expire: String;
+  date: TDateTime;
+begin
+  cargo := TCargoCompany.Create(PChar(aMsg), Length(aMsg));
+
+  if cargo.Command = CargoCompanyTypeResult then
+  begin
+    if cargo.ErrorCode = 0 then
+      FormFileList.ButtonRefreshClick(nil)
+    else
+    begin
+      Application.MessageBox(PChar('ErrorCode: ' + IntToStr(cargo.ErrorCode)),
+        'Confirm', 0);
+    end;
+  end
+  else if cargo.Command = CargoCompanyTypeUpload then
+  begin
+    SaveDialog1.FileName := cargo.Name;
+    if SaveDialog1.Execute then
+    begin
+      try
+        fsOut := TFileStreamUTF8.Create(SaveDialog1.FileName, fmCreate);
+        size := fsOut.Write(cargo.Content^, cargo.ContentSize);
+        fsOut.Free;
+
+        if cargo.ContentSize <> size then
+        begin
+          Application.MessageBox('Not enough space', 'Confirm', 0);
+        end;
+      except
+        on E: Exception do
+          Application.MessageBox(PChar(E.Message), 'File I/O Error', 0);
+      end;
+    end;
+  end
+  else if cargo.Command = CargoCompanyTypeList then
+  begin
+    list := FormFileList.ListView1;
+    list.BeginUpdate;
+
+    for i := 0 to (cargo.Files.count div 4) - 1 do
+    begin
+      seq := cargo.Files[i * 4];
+      filename := cargo.Files[i * 4 + 1];
+      sizestr := cargo.Files[i * 4 + 2];
+      expire := cargo.Files[i * 4 + 3];
+      date := UnixToDateTime(StrToInt(expire));
+      date := UniversalTimeToLocal(date);
+      ShortDateFormat := 'yy-mm-dd';
+      LongTimeFormat := 'hh:nn';
+      expire := DateTimeToStr(date);
+
+      item := list.Items.FindCaption(0, filename, False, True, False);
+      if item = nil then
+      begin
+        item := list.Items.Add;
+        item.Caption := filename;
+        item.SubItems.Add(sizestr);
+        item.SubItems.Add(expire);
+        item.SubItems.Add(seq);
+      end;
+    end;
+
+    for i := list.Items.Count - 1 downto 0 do
+    begin
+      filename := list.Items[i].Caption;
+      if cargo.Files.IndexOf(filename) = -1 then
+        list.Items[i].Delete;
+    end;
+
+    list.AlphaSort;
+    list.EndUpdate;
+  end;
+
+  cargo.Free;
 end;
 
 procedure TFormMain.OnStatus(var Msg: TLMessage);
@@ -562,6 +662,11 @@ var
 begin
   packet := 'TT' + aMsg;
   fCubeConn.Send(Pointer(packet), Length(packet), fCubeConn.getUniqueID, $5454);
+end;
+
+procedure TFormMain.SendData(data: Pointer; size, toAddress: DWord);
+begin
+  fCubeConn.send(data, size, fCubeConn.getUniqueID, toAddress);
 end;
 
 function TFormMain.Connected: Boolean;

@@ -1,0 +1,127 @@
+unit filelist;
+
+{$mode objfpc}{$H+}
+
+interface
+
+uses
+  Classes, SysUtils, FileUtil, Forms, Controls, Graphics, Dialogs, ComCtrls,
+  StdCtrls;
+
+type
+
+  { TFormFileList }
+
+  TFormFileList = class(TForm)
+    ButtonUpload: TButton;
+    ButtonDelete: TButton;
+    ButtonRefresh: TButton;
+    ListView1: TListView;
+    OpenDialog1: TOpenDialog;
+    procedure ButtonDeleteClick(Sender: TObject);
+    procedure ButtonUploadClick(Sender: TObject);
+    procedure ButtonRefreshClick(Sender: TObject);
+  private
+    { private declarations }
+  public
+    { public declarations }
+  end;
+
+var
+  FormFileList: TFormFileList;
+
+implementation
+
+{$R *.lfm}
+
+uses main, LazUTF8Classes, TwistedKnot, CargoCompany;
+
+{ TFormFileList }
+
+procedure TFormFileList.ButtonRefreshClick(Sender: TObject);
+var
+  cargo: TCargoCompany;
+  data: Pointer;
+  size: DWord;
+begin
+  cargo := TCargoCompany.Create;
+  cargo.Command := CargoCompanyTypeList;
+  data := cargo.getData(size);
+  FormMain.SendData(data, size, $5454);
+  cargo.Free;
+end;
+
+procedure TFormFileList.ButtonUploadClick(Sender: TObject);
+var
+  cargo: TCargoCompany;
+  fsIn: TFileStreamUTF8;
+  size, read: DWord;
+  data: Pointer;
+begin
+  if OpenDialog1.Execute then
+  begin
+    data := nil;
+
+    try
+      fsIn := TFileStreamUTF8.Create(OpenDialog1.FileName, fmOpenRead);
+      size := fsIn.Size;
+      data := GetMem(size);
+      if data = nil then
+      begin
+        FreeAndNil(fsIn);
+        Application.MessageBox('Not enough memory', 'Confirm', 0);
+        exit;
+      end;
+      read := fsIn.Read(data^, size);
+      FreeAndNil(fsIn);
+    except
+      on E: Exception do
+      begin
+        Application.MessageBox(PChar(E.Message), 'File I/O Error', 0);
+        if data <> nil then
+          FreeMem(data);
+        exit;
+      end;
+    end;
+
+    if size <> read then
+    begin
+      Application.MessageBox('Error on file reading', 'Confirm', 0);
+      FreeMem(data);
+      exit;
+    end;
+
+    cargo := TCargoCompany.Create;
+    cargo.Command := CargoCompanyTypeUpload;
+    cargo.Name := ExtractFileName(OpenDialog1.FileName);
+    cargo.ContentSize := size;
+    cargo.Content := data;
+
+    data := cargo.getData(size);
+    FormMain.SendData(data, size, $5454);
+    cargo.Free;
+  end;
+end;
+
+procedure TFormFileList.ButtonDeleteClick(Sender: TObject);
+var
+  cargo: TCargoCompany;
+  data: Pointer;
+  size: DWord;
+begin
+  if ListView1.SelCount <> 1 then
+  begin
+    Application.MessageBox('Select file in List', 'Confirm', 0);
+  end;
+
+  cargo := TCargoCompany.Create;
+  cargo.Command := CargoCompanyTypeRemove;
+  cargo.Name := ListView1.Selected.Caption;
+
+  data := cargo.getData(size);
+  FormMain.SendData(data, size, $5454);
+  cargo.Free;
+end;
+
+end.
+

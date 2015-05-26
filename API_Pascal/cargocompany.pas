@@ -102,7 +102,10 @@ begin
     count := packet.getNumber;
     fFiles := TStringList.Create;
     for i := 1 to count do begin
+      fFiles.Add(IntToStr(packet.getNumber));
       fFiles.Add(packet.getString);
+      fFiles.Add(IntToStr(packet.getNumber));
+      fFiles.Add(IntToStr(packet.getNumber));
     end;
   end
   else if fCommand = CargoCompanyTypeResult then

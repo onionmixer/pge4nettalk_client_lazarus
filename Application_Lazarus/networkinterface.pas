@@ -58,8 +58,7 @@ const
     'jHeRHKaCaGiaw8pJ7GATrileaqntWukseWGRIsO6CnjosWUcH0NOW4BGjCq4maXr' +
     'LH8N4EzXKJoFuGKdELDUfEZdozHnAOKY2IiFAKjPSAeUL2Rd5tg7hbIwum0JV9yy' +
     'mFz7gnP4jKQjCFunBQIDAQAB';
-  ServerHost = 'dev.lookandwalk.com';
-  //ServerHost = '10.0.2.2';
+  ServerHost = 'tknot.steelozcore.net';
   ServerPort = 4430;
 
 type
