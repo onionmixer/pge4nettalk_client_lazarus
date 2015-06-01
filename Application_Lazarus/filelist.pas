@@ -13,18 +13,23 @@ type
   { TFormFileList }
 
   TFormFileList = class(TForm)
+    ButtonShare: TButton;
     ButtonUpload: TButton;
     ButtonDelete: TButton;
     ButtonRefresh: TButton;
     ListView1: TListView;
     OpenDialog1: TOpenDialog;
     procedure ButtonDeleteClick(Sender: TObject);
+    procedure ButtonShareClick(Sender: TObject);
     procedure ButtonUploadClick(Sender: TObject);
     procedure ButtonRefreshClick(Sender: TObject);
   private
     { private declarations }
+    fShare: String;
+    procedure SetShare(AValue: String);
   public
     { public declarations }
+    property Share: String read fShare write SetShare;
   end;
 
 var
@@ -49,6 +54,22 @@ begin
   data := cargo.getData(size);
   FormMain.SendData(data, size, $5454);
   cargo.Free;
+end;
+
+procedure TFormFileList.SetShare(AValue: String);
+begin
+  if fShare = AValue then Exit;
+  fShare := AValue;
+  if fShare = '' then
+  begin
+    Caption := 'File List';
+    ButtonShare.Visible := False;
+  end
+  else
+  begin
+    Caption := 'File Share - ' + FormMain.GetNick(fShare);
+    ButtonShare.Visible := True;
+  end;
 end;
 
 procedure TFormFileList.ButtonUploadClick(Sender: TObject);
@@ -112,15 +133,40 @@ begin
   if ListView1.SelCount <> 1 then
   begin
     Application.MessageBox('Select file in List', 'Confirm', 0);
+    exit;
   end;
 
   cargo := TCargoCompany.Create;
   cargo.Command := CargoCompanyTypeRemove;
-  cargo.Name := ListView1.Selected.Caption;
+  cargo.Seq := StrToInt(ListView1.Selected.SubItems[2]);
 
   data := cargo.getData(size);
   FormMain.SendData(data, size, $5454);
   cargo.Free;
+end;
+
+procedure TFormFileList.ButtonShareClick(Sender: TObject);
+var
+  cargo: TCargoCompany;
+  data: Pointer;
+  size: DWord;
+begin
+  if ListView1.SelCount <> 1 then
+  begin
+    Application.MessageBox('Select file in List', 'Confirm', 0);
+    exit;
+  end;
+
+  cargo := TCargoCompany.Create;
+  cargo.Command := CargoCompanyTypeShare;
+  cargo.Seq := StrToInt(ListView1.Selected.SubItems[2]);
+  cargo.User := StrToInt(fShare);
+
+  data := cargo.getData(size);
+  FormMain.SendData(data, size, $5454);
+  cargo.Free;
+
+  Hide;
 end;
 
 end.

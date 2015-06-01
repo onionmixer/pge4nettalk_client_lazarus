@@ -4,17 +4,18 @@ object FormChat: TFormChat
   Top = 174
   Width = 419
   Caption = 'FormChat'
-  ClientHeight = 302
+  ClientHeight = 301
   ClientWidth = 419
   Menu = MainMenu1
   OnClose = FormClose
+  OnCreate = FormCreate
   OnDestroy = FormDestroy
   OnShow = FormShow
   Position = poDefaultPosOnly
   LCLVersion = '1.2.6.0'
   object RichView1: TRichView
     Left = 0
-    Height = 233
+    Height = 232
     Top = 0
     Width = 419
     TabStop = True
@@ -24,6 +25,7 @@ object FormChat: TFormChat
     VScrollVisible = True
     OnKeyDown = RichView1KeyDown
     FirstJumpNo = 0
+    OnJump = RichView1Jump
     Style = RVStyle1
     MaxTextWidth = 0
     MinTextWidth = 0
@@ -39,7 +41,7 @@ object FormChat: TFormChat
     Cursor = crVSplit
     Left = 0
     Height = 5
-    Top = 233
+    Top = 232
     Width = 419
     Align = alBottom
     ResizeAnchor = akBottom
@@ -47,7 +49,7 @@ object FormChat: TFormChat
   object Panel1: TPanel
     Left = 0
     Height = 64
-    Top = 238
+    Top = 237
     Width = 419
     Align = alBottom
     BevelOuter = bvNone
@@ -402,6 +404,10 @@ object FormChat: TFormChat
       object MenuInvite: TMenuItem
         Caption = '&Invite...'
         OnClick = MenuInviteClick
+      end
+      object MenuShare: TMenuItem
+        Caption = '&Share...'
+        OnClick = MenuShareClick
       end
       object MenuClose: TMenuItem
         Caption = '&Close'

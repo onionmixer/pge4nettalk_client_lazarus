@@ -20,23 +20,28 @@ type
     MenuItem1: TMenuItem;
     MenuClose: TMenuItem;
     MenuInvite: TMenuItem;
+    MenuShare: TMenuItem;
     Panel1: TPanel;
     RichView1: TRichView;
     RVStyle1: TRVStyle;
     Splitter1: TSplitter;
     procedure Button1Click(Sender: TObject);
     procedure FormClose(Sender: TObject; var CloseAction: TCloseAction);
+    procedure FormCreate(Sender: TObject);
     procedure FormDestroy(Sender: TObject);
     procedure FormShow(Sender: TObject);
     procedure Memo1KeyPress(Sender: TObject; var Key: char);
     procedure MenuCloseClick(Sender: TObject);
     procedure MenuInviteClick(Sender: TObject);
+    procedure MenuShareClick(Sender: TObject);
+    procedure RichView1Jump(Sender: TObject; id: Integer);
     procedure RichView1KeyDown(Sender: TObject; var Key: Word;
       Shift: TShiftState);
   private
     { private declarations }
     FromID: String;
     TargetID: String;
+    JumpSeq: TStrings;
   public
     { public declarations }
     procedure SetUser(from, target: String);
@@ -50,7 +55,7 @@ implementation
 
 {$R *.lfm}
 
-uses main, ChatLabel;
+uses main, filelist, ChatLabel, CargoCompany;
 
 { TFormChat }
 
@@ -71,6 +76,11 @@ end;
 procedure TFormChat.FormClose(Sender: TObject; var CloseAction: TCloseAction);
 begin
   CloseAction := caFree;
+end;
+
+procedure TFormChat.FormCreate(Sender: TObject);
+begin
+  JumpSeq := TStringList.Create;
 end;
 
 procedure TFormChat.FormDestroy(Sender: TObject);
@@ -105,6 +115,28 @@ begin
   FormMain.SendMsg('INVT'+TargetID + '|' + invite);
 end;
 
+procedure TFormChat.MenuShareClick(Sender: TObject);
+begin
+  FormFileList.Share := TargetID;
+  FormFileList.Show;
+  FormFileList.ButtonRefreshClick(nil);
+end;
+
+procedure TFormChat.RichView1Jump(Sender: TObject; id: Integer);
+var
+  cargo: TCargoCompany;
+  data: Pointer;
+  size: DWord;
+begin
+  cargo := TCargoCompany.Create;
+  cargo.Command := CargoCompanyTypeDownload;
+  cargo.Seq := StrToInt(JumpSeq[id]);
+
+  data := cargo.getData(size);
+  FormMain.SendData(data, size, $5454);
+  cargo.Free;
+end;
+
 procedure TFormChat.RichView1KeyDown(Sender: TObject; var Key: Word;
   Shift: TShiftState);
 begin
@@ -118,7 +150,7 @@ procedure TFormChat.SetUser(from, target: String);
 begin
   FromID := from;
   TargetID := target;
-  Caption := 'Talk To - ' + target;
+  Caption := 'Talk To - ' + FormMain.GetNick(target);
 end;
 
 procedure TFormChat.RecvMsg(aMsg: String);
@@ -166,6 +198,7 @@ begin
     //RichView1.AddHotSpot(1, ImageList1, False);
     //RichView1.AddTextFromNewLine(aMsg, rvsJump1, textAlign);
 
+    from := FormMain.GetNick(from);
     RichView1.AddTextFromNewLine(from, 0, textAlign);
     RichView1.AddControl(Chat, textAlign);
 
@@ -187,6 +220,36 @@ begin
     RichView1.FormatTail;
     RichView1.Invalidate;
     if not Showing then Show;
+  end
+  else if (cmd = 'FILE') then
+  begin
+    cut := Pos('|', aMsg);
+    if cut = 0 then exit;
+    target := Copy(aMsg, 7, cut - 7);
+    Delete(aMsg, 1, cut);
+    cut := Pos('|', aMsg);
+    if cut = 0 then exit;
+    from := Copy(aMsg, 1, cut - 1);
+    Delete(aMsg, 1, cut);
+
+    if (from = FromID) then
+    begin
+      textAlign := rvalLeft;
+    end
+    else
+    begin
+      textAlign := rvalRight;
+    end;
+
+    from := FormMain.GetNick(from);
+    RichView1.AddTextFromNewLine(from, 0, textAlign);
+    RichView1.AddTextFromNewLine('Download: ' + aMsg, rvsJump1, textAlign);
+
+    RichView1.FormatTail;
+    RichView1.Invalidate;
+    if not Showing then Show;
+
+    JumpSeq.Add(aMsg);
   end
   else
   begin

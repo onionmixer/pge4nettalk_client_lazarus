@@ -8,17 +8,21 @@ uses
   Classes, SysUtils;
 
 const
+  /// Cargo Company ID
   CargoCompanyID:Word = $464D;
-  /// UP: 파일 업로드 요청
-  CargoCompanyTypeUpload = $5550;
-  /// RM: 파일 삭제 요청
-  CargoCompanyTypeRemove = $524D;
-  /// DN: 파일 다운로드 요청
-  CargoCompanyTypeDownload = $444E;
-  /// LS: 파일 목록 요청
-  CargoCompanyTypeList = $4C53;
-  /// RE: 요청에 대한 결과값
-  CargoCompanyTypeResult = $5245;
+
+  /// DN: 파일 다운로드
+  CargoCompanyTypeDownload:Word = $444E;
+  /// UP: 파일 업로드
+  CargoCompanyTypeUpload:Word = $5550;
+  /// RE: 업로드 결과
+  CargoCompanyTypeResult:Word = $5245;
+  /// RM: 파일 삭제
+  CargoCompanyTypeRemove:Word = $524D;
+  /// SH: 파일 공유
+  CargoCompanyTypeShare:Word = $5348;
+  /// LS: 파일 목록
+  CargoCompanyTypeList:Word = $4C53;
 
 type
 
@@ -26,12 +30,15 @@ type
 
   TCargoCompany = class
   private
-    fCommand: Word;
+    fType: Word;
     fErrorCode: Word;
+    fSeq: DWord;
     fName: UTF8String;
+    fSize: DWord;
+    fExpire: DWord;
     fContent: Pointer;
     fContentSize: DWord;
-    fOwner: UTF8String;
+    fUser: DWord;
     fFiles: TStrings;
   public
     constructor Create;
@@ -40,12 +47,15 @@ type
 
     function getData(var size:DWord): Pointer;
 
-    property Command: Word read FCommand write fCommand;
+    property Command: Word read fType write fType;
     property ErrorCode: Word read fErrorCode write fErrorCode;
+    property Seq: DWord read fSeq write fSeq;
     property Name: UTF8String read fName write fName;
+    property Size: DWord read fSize write fSize;
+    property Expire: DWord read fExpire write fExpire;
     property Content: Pointer read fContent write fContent;
     property ContentSize: DWord read fContentSize write fContentSize;
-    property Owner: UTF8String read fOwner write fOwner;
+    property User: DWord read fUser write fUser;
     property Files: TStrings read fFiles write fFiles;
   end;
 
@@ -57,7 +67,7 @@ uses TwistedKnot;
 
 constructor TCargoCompany.Create;
 begin
-  fCommand := 0;
+  fType := 0;
   fErrorCode := 0;
   fName := '';
   fContent := nil;
@@ -72,7 +82,7 @@ var
   pos, count, i: DWord;
   filename: UTF8String;
 begin
-  fCommand := 0;
+  fType := 0;
   fErrorCode := 0;
   fName := '';
   fContent := nil;
@@ -88,16 +98,33 @@ begin
     exit;
   end;
 
-  fCommand := packet.getUInt16;
+  fType := packet.getUInt16;
+  fErrorCode := packet.getUInt16;
 
-  if fCommand = CargoCompanyTypeUpload then
+  if fType = CargoCompanyTypeUpload then
   begin
     fName := packet.getString;
     fContentSize := packet.getNumber;
     fContent := GetMem(fContentSize);
     packet.getBytes(fContent, fContentSize);
   end
-  else if fCommand = CargoCompanyTypeList then
+  else if fType = CargoCompanyTypeResult then
+  begin
+    fSeq := packet.getNumber;
+    fName := packet.getString;
+    fSize := packet.getNumber;
+    fExpire := packet.getNumber;
+  end
+  else if fType = CargoCompanyTypeRemove then
+  begin
+    fSeq := packet.getNumber;
+  end
+  else if fType = CargoCompanyTypeShare then
+  begin
+    fSeq := packet.getNumber;
+    fUser := packet.getNumber;
+  end
+  else if fType = CargoCompanyTypeList then
   begin
     count := packet.getNumber;
     fFiles := TStringList.Create;
@@ -108,14 +135,9 @@ begin
       fFiles.Add(IntToStr(packet.getNumber));
     end;
   end
-  else if fCommand = CargoCompanyTypeResult then
-  begin
-    fName := packet.getString;
-    fErrorCode := packet.getUInt16;
-  end
   else
   begin
-    fCommand := 0;
+    fType := 0;
   end;
 
   packet.Free;
@@ -145,12 +167,13 @@ begin
   packet := TTwistedKnotPacket.Create;
 
   packet.putUInt16(CargoCompanyID);
-  packet.putUInt16(fCommand);
+  packet.putUInt16(fType);
+  packet.putUInt16(fErrorCode);
 
   size := 0;
   Result := nil;
 
-  if fCommand = CargoCompanyTypeUpload then
+  if fType = CargoCompanyTypeUpload then
   begin
     if (fName = '') or (fContent = nil) then
     begin
@@ -162,28 +185,20 @@ begin
     packet.putNumber(fContentSize);
     packet.putBytes(fContent, fContentSize);
   end
-  else if fCommand = CargoCompanyTypeRemove then
+  else if fType = CargoCompanyTypeDownload then
   begin
-    if (fName = '') then
-    begin
-      packet.Free;
-      exit;
-    end;
-
-    packet.putString(fName);
+    packet.putNumber(fSeq);
   end
-  else if fCommand = CargoCompanyTypeDownload then
+  else if fType = CargoCompanyTypeRemove then
   begin
-    if (fName = '') or (fOwner = '') then
-    begin
-      packet.Free;
-      exit;
-    end;
-
-    packet.putString(fName);
-    packet.putString(fOwner);
+    packet.putNumber(fSeq);
   end
-  else if fCommand = CargoCompanyTypeList then
+  else if fType = CargoCompanyTypeShare then
+  begin
+    packet.putNumber(fSeq);
+    packet.putNumber(fUser);
+  end
+  else if fType = CargoCompanyTypeList then
   begin
     packet.putNumber(0);
   end

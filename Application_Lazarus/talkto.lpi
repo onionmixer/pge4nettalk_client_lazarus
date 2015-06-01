@@ -90,6 +90,7 @@
         <Filename Value="filelist.pas"/>
         <IsPartOfProject Value="True"/>
         <ComponentName Value="FormFileList"/>
+        <HasResources Value="True"/>
         <ResourceBaseClass Value="Form"/>
         <UnitName Value="filelist"/>
       </Unit7>

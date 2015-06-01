@@ -65,6 +65,7 @@ type
     function SendDropMsg(User: String): Boolean;
     function RecvForm(User: String; ID: String): TFormTransfer;
     procedure RecvClose(User: String; ID: String);
+    function GetNick(User: String): String;
     procedure OnDebug(Sender: TObject; aMsg: String);
 
     property LeftSkin: TChatSkin read fLeftSkin;
@@ -105,8 +106,8 @@ end;
 
 procedure TFormMain.MenuItemFileListClick(Sender: TObject);
 begin
+  FormFileList.Share := '';
   FormFileList.Show;
-  FormFileList.ButtonRefreshClick(nil);
 end;
 
 procedure TFormMain.FormCreate(Sender: TObject);
@@ -167,11 +168,13 @@ begin
 end;
 
 procedure TFormMain.TreeView1DblClick(Sender: TObject);
+var
+  user: String;
 begin
   if TreeView1.Selected = nil then exit;
-  if TreeView1.Selected.Text = fUser then exit;
-
-  ChatForm(TreeView1.Selected.Text).Show;
+  User := IntToStr(Integer(TreeView1.Selected.Data));
+  if User = fUser then exit;
+  ChatForm(User).Show;
 end;
 
 procedure TFormMain.OnReceive(var Msg: TLMessage);
@@ -222,9 +225,9 @@ begin
   begin
     fAuth := True;
     fUser := Copy(aMsg, 7, 32);
-    Caption := 'Talk To - ' + fUser;
     MenuConnect.Caption := 'Dis&connect';
     FormLogin.Hide;
+    FormFileList.ButtonRefreshClick(nil);
   end
   else if (cmd = 'STAT') then
   begin
@@ -242,6 +245,8 @@ begin
     Delete(aMsg, 1, cut);
     image := aMsg;
     updateUserInfo(user, nick, group, status, image);
+    if user = fUser then
+      Caption := 'Talk To - ' + nick;
   end
   else if (cmd = 'MESG') then
   begin
@@ -276,6 +281,12 @@ begin
       if form <> nil then
         form.RecvMsg(aMsg);
     end;
+  end
+  else if (cmd = 'FILE') then
+  begin
+    cut := Pos('|', aMsg);
+    user := Copy(aMsg, 7, cut - 7);
+    ChatForm(user).RecvMsg(aMsg);
   end
   else if (cmd = 'FILE') then
   begin
@@ -351,20 +362,18 @@ var
   item: TListItem;
   i: Integer;
   size: DWord;
-  seq, filename, sizestr, expire: String;
+  str, seq, filename, sizestr, expire: String;
   date: TDateTime;
 begin
   cargo := TCargoCompany.Create(PChar(aMsg), Length(aMsg));
 
-  if cargo.Command = CargoCompanyTypeResult then
+  if cargo.ErrorCode <> 0 then
   begin
-    if cargo.ErrorCode = 0 then
-      FormFileList.ButtonRefreshClick(nil)
+    if cargo.ErrorCode = 1 then
+      str := 'invalid value'
     else
-    begin
-      Application.MessageBox(PChar('ErrorCode: ' + IntToStr(cargo.ErrorCode)),
-        'Confirm', 0);
-    end;
+      str := 'server error';
+    Application.MessageBox(PChar(str), 'Cargo Company Error', 0);
   end
   else if cargo.Command = CargoCompanyTypeUpload then
   begin
@@ -385,6 +394,55 @@ begin
           Application.MessageBox(PChar(E.Message), 'File I/O Error', 0);
       end;
     end;
+  end
+  else if cargo.Command = CargoCompanyTypeResult then
+  begin
+    list := FormFileList.ListView1;
+    list.BeginUpdate;
+
+    seq := IntToStr(cargo.Seq);
+    filename := cargo.Name;
+    sizestr := IntToStr(cargo.Size);
+    date := UnixToDateTime(cargo.Expire);
+    date := UniversalTimeToLocal(date);
+    ShortDateFormat := 'yy-mm-dd';
+    LongTimeFormat := 'hh:nn';
+    expire := DateTimeToStr(date);
+
+    item := list.Items.FindCaption(0, filename, False, True, False);
+    if item = nil then
+    begin
+      item := list.Items.Add;
+      item.Caption := filename;
+      item.SubItems.Add(sizestr);
+      item.SubItems.Add(expire);
+      item.SubItems.Add(seq);
+    end
+    else
+    begin
+      item.SubItems[0] := sizestr;
+      item.SubItems[1] := expire;
+      item.SubItems[2] := seq;
+    end;
+
+    list.AlphaSort;
+    list.EndUpdate;
+  end
+  else if cargo.Command = CargoCompanyTypeRemove then
+  begin
+    seq := IntToStr(cargo.Seq);
+    for i := list.Items.Count - 1 downto 0 do
+    begin
+      if seq = list.Items[i].SubItems[2] then
+      begin
+        list.Items[i].Delete;
+        break;
+      end;
+    end;
+  end
+  else if cargo.Command = CargoCompanyTypeShare then
+  begin
+    SendMsg('FILE' + IntToStr(cargo.User) + '|' + IntToStr(cargo.Seq));
   end
   else if cargo.Command = CargoCompanyTypeList then
   begin
@@ -411,6 +469,12 @@ begin
         item.SubItems.Add(sizestr);
         item.SubItems.Add(expire);
         item.SubItems.Add(seq);
+      end
+      else
+      begin
+        item.SubItems[0] := sizestr;
+        item.SubItems[1] := expire;
+        item.SubItems[2] := seq;
       end;
     end;
 
@@ -451,6 +515,7 @@ var
   node: TTreeNode;
   userNode: TTreeNode;
   newGroup: Boolean;
+  userSeq: Integer;
 begin
   if (User = '') or (Nick = '') or (Group = '') then
     exit;
@@ -465,12 +530,21 @@ begin
     node := TreeView1.Items.Add(nil, group);
   end;
 
-  userNode := node.FindNode(user);
+  userSeq := StrToInt(user);
+  userNode := node.GetFirstChild;
+  while (userNode <> nil) and (userNode.Data <> Pointer(userSeq)) do
+    userNode := userNode.GetNextSibling;
 
   if (userNode = nil) and (Status <> 'offline') then
-    TreeView1.Items.AddChild(node, user)
+  begin
+    userNode := TreeView1.Items.AddChild(node, nick);
+    userNode.Data := Pointer(userSeq);
+  end
   else if (userNode <> nil) And (Status = 'offline') then
+  begin
     userNode.Delete;
+    userNode := nil;
+  end;
 
   if newGroup then
     node.Expand(True);
@@ -653,6 +727,28 @@ begin
     fRecvForm.Delete(index);
   end;
   fFormSync.Leave;
+end;
+
+function TFormMain.GetNick(User: String): String;
+var
+  seq: Integer;
+  groupNode, userNode: TTreeNode;
+begin
+  Result := User;
+  seq := StrToInt(User);
+  groupNode := TreeView1.Items.GetFirstNode;
+  while groupNode <> nil do
+  begin
+    userNode := groupNode.GetFirstChild;
+    while (userNode <> nil) And (userNode.Data <> Pointer(seq)) do
+      userNode := userNode.GetNextSibling;
+    if userNode <> nil then
+    begin
+      Result := userNode.Text;
+      exit;
+    end;
+    groupNode := groupNode.GetNextSibling;
+  end;
 end;
 
 procedure TFormMain.SendMsg(aMsg: string);
