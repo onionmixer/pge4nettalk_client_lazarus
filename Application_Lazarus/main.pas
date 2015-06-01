@@ -430,6 +430,9 @@ begin
   end
   else if cargo.Command = CargoCompanyTypeRemove then
   begin
+    list := FormFileList.ListView1;
+    list.BeginUpdate;
+
     seq := IntToStr(cargo.Seq);
     for i := list.Items.Count - 1 downto 0 do
     begin
@@ -439,6 +442,8 @@ begin
         break;
       end;
     end;
+
+    list.EndUpdate;
   end
   else if cargo.Command = CargoCompanyTypeShare then
   begin

@@ -58,7 +58,7 @@ end;
 
 procedure TFormFileList.SetShare(AValue: String);
 begin
-  if fShare = AValue then Exit;
+  if (ButtonShare.Visible = (AValue <> '')) and (fShare = AValue) then Exit;
   fShare := AValue;
   if fShare = '' then
   begin
