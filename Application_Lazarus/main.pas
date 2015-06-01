@@ -286,6 +286,12 @@ begin
   begin
     cut := Pos('|', aMsg);
     user := Copy(aMsg, 7, cut - 7);
+    if user = fUser then
+    begin
+      user := Copy(aMsg, cut + 1, 32);
+      cut := Pos('|', user);
+      user := Copy(user, 1, cut - 1);
+    end;
     ChatForm(user).RecvMsg(aMsg);
   end
   else if (cmd = 'FILE') then
