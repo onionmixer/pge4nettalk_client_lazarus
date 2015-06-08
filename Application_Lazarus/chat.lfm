@@ -10,6 +10,7 @@ object FormChat: TFormChat
   OnClose = FormClose
   OnCreate = FormCreate
   OnDestroy = FormDestroy
+  OnKeyDown = FormKeyDown
   OnShow = FormShow
   Position = poDefaultPosOnly
   LCLVersion = '1.2.6.0'
@@ -57,23 +58,25 @@ object FormChat: TFormChat
     ClientHeight = 64
     ClientWidth = 419
     TabOrder = 2
-    object Button1: TButton
+    object ButtonSend: TButton
       Left = 344
       Height = 64
       Top = 0
       Width = 75
       Align = alRight
-      Caption = 'Button1'
-      OnClick = Button1Click
+      Caption = 'Send'
+      OnClick = ButtonSendClick
+      OnKeyDown = FormKeyDown
       TabOrder = 0
     end
-    object Memo1: TMemo
+    object MemoMessage: TMemo
       Left = 0
       Height = 64
       Top = 0
       Width = 344
       Align = alClient
-      OnKeyPress = Memo1KeyPress
+      OnKeyDown = FormKeyDown
+      OnKeyPress = MemoMessageKeyPress
       TabOrder = 1
     end
   end

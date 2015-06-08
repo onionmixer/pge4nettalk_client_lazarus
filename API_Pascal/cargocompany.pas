@@ -15,7 +15,7 @@ const
   CargoCompanyTypeDownload:Word = $444E;
   /// UP: 파일 업로드
   CargoCompanyTypeUpload:Word = $5550;
-  /// RE: 업로드 결과
+  /// RE: 요청 결과
   CargoCompanyTypeResult:Word = $5245;
   /// RM: 파일 삭제
   CargoCompanyTypeRemove:Word = $524D;
@@ -23,6 +23,8 @@ const
   CargoCompanyTypeShare:Word = $5348;
   /// LS: 파일 목록
   CargoCompanyTypeList:Word = $4C53;
+  /// ST: 파일 목록
+  CargoCompanyTypeStat:Word = $5354;
 
 type
 
@@ -32,9 +34,11 @@ type
   private
     fType: Word;
     fErrorCode: Word;
+    fResultType: Word;
     fSeq: DWord;
     fName: UTF8String;
     fSize: DWord;
+    fMime: UTF8String;
     fExpire: DWord;
     fContent: Pointer;
     fContentSize: DWord;
@@ -49,9 +53,11 @@ type
 
     property Command: Word read fType write fType;
     property ErrorCode: Word read fErrorCode write fErrorCode;
+    property ResultType: Word read fResultType write fResultType;
     property Seq: DWord read fSeq write fSeq;
     property Name: UTF8String read fName write fName;
     property Size: DWord read fSize write fSize;
+    property Mime: UTF8String read fMime write fMime;
     property Expire: DWord read fExpire write fExpire;
     property Content: Pointer read fContent write fContent;
     property ContentSize: DWord read fContentSize write fContentSize;
@@ -110,9 +116,11 @@ begin
   end
   else if fType = CargoCompanyTypeResult then
   begin
+    fResultType := packet.getUInt16;
     fSeq := packet.getNumber;
     fName := packet.getString;
     fSize := packet.getNumber;
+    fMime := packet.getString;
     fExpire := packet.getNumber;
   end
   else if fType = CargoCompanyTypeRemove then
@@ -132,8 +140,13 @@ begin
       fFiles.Add(IntToStr(packet.getNumber));
       fFiles.Add(packet.getString);
       fFiles.Add(IntToStr(packet.getNumber));
+      fFiles.Add(packet.getString);
       fFiles.Add(IntToStr(packet.getNumber));
     end;
+  end
+  else if fType = CargoCompanyTypeStat then
+  begin
+    fSeq := packet.getNumber;
   end
   else
   begin
@@ -201,6 +214,10 @@ begin
   else if fType = CargoCompanyTypeList then
   begin
     packet.putNumber(0);
+  end
+  else if fType = CargoCompanyTypeStat then
+  begin
+    packet.putNumber(fSeq);
   end
   else
   begin

@@ -14,13 +14,12 @@ type
   { TFormMain }
 
   TFormMain = class(TForm)
-    ComboBox1: TComboBox;
     ImageList1: TImageList;
     MainMenu1: TMainMenu;
     MenuItem1: TMenuItem;
     MenuExit: TMenuItem;
     MenuConnect: TMenuItem;
-    MenuItemFileList: TMenuItem;
+    MenuFileList: TMenuItem;
     SaveDialog1: TSaveDialog;
     StatusBar1: TStatusBar;
     TreeView1: TTreeView;
@@ -28,7 +27,7 @@ type
     procedure FormDestroy(Sender: TObject);
     procedure MenuExitClick(Sender: TObject);
     procedure MenuConnectClick(Sender: TObject);
-    procedure MenuItemFileListClick(Sender: TObject);
+    procedure MenuFileListClick(Sender: TObject);
     procedure TreeView1DblClick(Sender: TObject);
   private
     { private declarations }
@@ -41,6 +40,7 @@ type
     fSendUser: TStringList;
     fRecvForm: TObjectList;
     fRecvUser: TStringList;
+    fFileList: TStringList;
     fFormSync: TCriticalSection;
 
     fLeftSkin, fRightSkin, fSelectSkin: TChatSkin;
@@ -59,6 +59,7 @@ type
     function Connected: Boolean;
     function ChatForm(User: String; Add: Boolean = True): TFormChat;
     procedure ChatClose(User: String);
+    procedure ChatCloseAll;
     procedure Join(Room: String; User:String);
     function SendForm(User: String; ID: String): TFormTransfer;
     procedure SendClose(User: String; ID: String);
@@ -104,7 +105,7 @@ begin
   end;
 end;
 
-procedure TFormMain.MenuItemFileListClick(Sender: TObject);
+procedure TFormMain.MenuFileListClick(Sender: TObject);
 begin
   FormFileList.Share := '';
   FormFileList.Show;
@@ -123,7 +124,10 @@ begin
   fSendUser := TStringList.Create;
   fRecvForm := TObjectList.Create;
   fRecvUser := TStringList.Create;
+  fFileList := TStringList.Create;
+
   MenuConnect.Caption := '&Connect...';
+  MenuFileList.Enabled := False;
 
   Skin := TBitmap.Create;
 
@@ -163,6 +167,8 @@ begin
 
   fRecvForm.Free;
   fRecvUser.Free;
+
+  fFileList.Free;
 
   fFormSync.Free;
 end;
@@ -204,6 +210,9 @@ var
   cut: Integer;
   user, room, nick, group, status, image, id: String;
   form: TFormChat;
+  cargo: TCargoCompany;
+  data: Pointer;
+  size: DWord;
 begin
   cmd := Copy(aMsg, 3, 4);
   if (cmd = 'QUIT') then
@@ -213,7 +222,9 @@ begin
       fAuth := False;
       Caption := 'Talk To';
       MenuConnect.Caption := '&Connect...';
+      MenuFileList.Enabled := False;
       TreeView1.Items.Clear;
+      ChatCloseAll;
     end
     else
     begin
@@ -226,6 +237,7 @@ begin
     fAuth := True;
     fUser := Copy(aMsg, 7, 32);
     MenuConnect.Caption := 'Dis&connect';
+    MenuFileList.Enabled := True;
     FormLogin.Hide;
     FormFileList.ButtonRefreshClick(nil);
   end
@@ -285,61 +297,22 @@ begin
   else if (cmd = 'FILE') then
   begin
     cut := Pos('|', aMsg);
-    user := Copy(aMsg, 7, cut - 7);
-    if user = fUser then
-    begin
-      user := Copy(aMsg, cut + 1, 32);
-      cut := Pos('|', user);
-      user := Copy(user, 1, cut - 1);
-    end;
-    ChatForm(user).RecvMsg(aMsg);
-  end
-  else if (cmd = 'FILE') then
-  begin
-    OnDebug(Self, aMsg);
-    sub := Copy(aMsg, 7, 3);
-    Delete(aMsg, 1, 10);
-    cut := Pos('|', aMsg);
-    if cut = 0 then cut := Length(aMsg) + 1;
-    user := Copy(aMsg, 1, cut - 1);
-    Delete(aMsg, 1, cut);
-    cut := Pos('|', aMsg);
-    if cut = 0 then cut := Length(aMsg) + 1;
-    id := Copy(aMsg, 1, cut - 1);
+    room := Copy(aMsg, 7, cut - 7);
     Delete(aMsg, 1, cut);
 
-    if sub = 'snd' then
-    begin
-      SendForm(user, id);
-    end
-    else if sub = 'req' then
-    begin
-      RecvForm(user, id);
-    end
-    else if sub = 'rej' then
-    begin
-      SendClose(user, id);
-    end
-    else if sub = 'abt' then
-    begin
-      RecvClose(user, id);
-    end
-    else if sub = 'acs' then
-    begin
-      SendForm(user, id).Connect(aMsg);
-    end
-    else if sub = 'acr' then
-    begin
-      RecvForm(user, id).Connect(aMsg);
-    end
-    else if sub = 'rcv' then
-    begin
-      RecvForm(user, id).Recv(aMsg);
-    end;
-  end
-  else
-  begin
-    //FormChat.RecvMsg(aMsg);
+    cut := Pos('|', aMsg);
+    user := Copy(aMsg, 1, cut - 1);
+    Delete(aMsg, 1, cut);
+
+    cargo := TCargoCompany.Create;
+    cargo.Command := CargoCompanyTypeStat;
+    cargo.Seq := StrToInt(aMsg);
+
+    data := cargo.getData(size);
+    SendData(data, size, $5454);
+    cargo.Free;
+
+    fFileList.Add(aMsg + '|' + room + '|' + user);
   end;
 end;
 
@@ -366,9 +339,9 @@ var
   fsOut: TFileStreamUTF8;
   list: TListView;
   item: TListItem;
-  i: Integer;
+  i, cut: Integer;
   size: DWord;
-  str, seq, filename, sizestr, expire: String;
+  str, seq, filename, sizestr, mime, expire, user: String;
   date: TDateTime;
 begin
   cargo := TCargoCompany.Create(PChar(aMsg), Length(aMsg));
@@ -401,7 +374,8 @@ begin
       end;
     end;
   end
-  else if cargo.Command = CargoCompanyTypeResult then
+  else if (cargo.Command = CargoCompanyTypeResult) And
+    (cargo.ResultType = CargoCompanyTypeUpload) then
   begin
     list := FormFileList.ListView1;
     list.BeginUpdate;
@@ -434,6 +408,29 @@ begin
     list.AlphaSort;
     list.EndUpdate;
   end
+  else if (cargo.Command = CargoCompanyTypeResult) And
+    (cargo.ResultType = CargoCompanyTypeStat) then
+  begin
+    seq := IntToStr(cargo.Seq) + '|';
+    size := Length(seq);
+    for i := fFileList.Count - 1 downto 0 do
+    begin
+      if Copy(fFileList[i], 1, size) <> seq then
+        continue;
+
+      str := fFileList[i];
+      Delete(str, 1, size);
+      cut := Pos('|', str);
+      user := Copy(str, 1, cut - 1);
+      if user = fUser then
+      begin
+        user := Copy(str, cut + 1, Length(str));
+      end;
+      ChatForm(user).RecvFile(fFileList[i], cargo.Name, cargo.Mime,
+        cargo.Size, cargo.Expire);
+      fFileList.Delete(i);
+    end;
+  end
   else if cargo.Command = CargoCompanyTypeRemove then
   begin
     list := FormFileList.ListView1;
@@ -460,12 +457,13 @@ begin
     list := FormFileList.ListView1;
     list.BeginUpdate;
 
-    for i := 0 to (cargo.Files.count div 4) - 1 do
+    for i := 0 to (cargo.Files.count div 5) - 1 do
     begin
-      seq := cargo.Files[i * 4];
-      filename := cargo.Files[i * 4 + 1];
-      sizestr := cargo.Files[i * 4 + 2];
-      expire := cargo.Files[i * 4 + 3];
+      seq := cargo.Files[i * 5];
+      filename := cargo.Files[i * 5 + 1];
+      sizestr := cargo.Files[i * 5 + 2];
+      mime := cargo.Files[i * 5 + 3];
+      expire := cargo.Files[i * 5 + 4];
       date := UnixToDateTime(StrToInt(expire));
       date := UniversalTimeToLocal(date);
       ShortDateFormat := 'yy-mm-dd';
@@ -627,6 +625,18 @@ begin
     fChatForm.Delete(index);
   end;
   fFormSync.Leave;
+end;
+
+procedure TFormMain.ChatCloseAll;
+var
+  i: Integer;
+  form: TFormChat;
+begin
+  for i := fChatUser.Count - 1 downto 0 do
+  begin
+    form := fChatForm[i] as TFormChat;
+    form.Free;
+  end;
 end;
 
 procedure TFormMain.Join(Room: String; User: String);

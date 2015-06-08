@@ -18,6 +18,8 @@ type
     Label1: TLabel;
     Label2: TLabel;
     procedure ButtonLoginClick(Sender: TObject);
+    procedure EditIDKeyPress(Sender: TObject; var Key: char);
+    procedure EditPassWordKeyPress(Sender: TObject; var Key: char);
     procedure FormShow(Sender: TObject);
   private
     { private declarations }
@@ -48,6 +50,24 @@ begin
   end
   else
     Application.MessageBox('서버에 접속하지 못했습니다.', '확인', 0);
+end;
+
+procedure TFormLogin.EditIDKeyPress(Sender: TObject; var Key: char);
+begin
+  if Key = #13 then
+  begin
+    Key := #0;
+    EditPassword.SetFocus;
+  end;
+end;
+
+procedure TFormLogin.EditPassWordKeyPress(Sender: TObject; var Key: char);
+begin
+  if Key = #13 then
+  begin
+    Key := #0;
+    ButtonLoginClick(Sender);
+  end;
 end;
 
 procedure TFormLogin.FormShow(Sender: TObject);

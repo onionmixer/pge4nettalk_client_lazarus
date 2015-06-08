@@ -13,10 +13,10 @@ type
   { TFormChat }
 
   TFormChat = class(TForm)
-    Button1: TButton;
+    ButtonSend: TButton;
     ImageList1: TImageList;
     MainMenu1: TMainMenu;
-    Memo1: TMemo;
+    MemoMessage: TMemo;
     MenuItem1: TMenuItem;
     MenuClose: TMenuItem;
     MenuInvite: TMenuItem;
@@ -25,12 +25,13 @@ type
     RichView1: TRichView;
     RVStyle1: TRVStyle;
     Splitter1: TSplitter;
-    procedure Button1Click(Sender: TObject);
+    procedure ButtonSendClick(Sender: TObject);
     procedure FormClose(Sender: TObject; var CloseAction: TCloseAction);
     procedure FormCreate(Sender: TObject);
     procedure FormDestroy(Sender: TObject);
+    procedure FormKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
     procedure FormShow(Sender: TObject);
-    procedure Memo1KeyPress(Sender: TObject; var Key: char);
+    procedure MemoMessageKeyPress(Sender: TObject; var Key: char);
     procedure MenuCloseClick(Sender: TObject);
     procedure MenuInviteClick(Sender: TObject);
     procedure MenuShareClick(Sender: TObject);
@@ -46,6 +47,7 @@ type
     { public declarations }
     procedure SetUser(from, target: String);
     procedure RecvMsg(aMsg: String);
+    procedure RecvFile(aMsg, filename, mime: String; size, expire: DWord);
   end;
 
 //var
@@ -55,22 +57,22 @@ implementation
 
 {$R *.lfm}
 
-uses main, filelist, ChatLabel, CargoCompany;
+uses main, filelist, ChatLabel, CargoCompany, LCLType, DateUtils;
 
 { TFormChat }
 
-procedure TFormChat.Button1Click(Sender: TObject);
+procedure TFormChat.ButtonSendClick(Sender: TObject);
 var
   aMsg: String;
 begin
-  aMsg := TrimRight(Memo1.Text);
+  aMsg := TrimRight(MemoMessage.Text);
   if aMsg <> '' then
   begin
     aMsg := 'MESG' + TargetID + '|' + aMsg;
     FormMain.SendMsg(aMsg);
-    Memo1.Clear;
+    MemoMessage.Clear;
   end;
-  Memo1.SetFocus;
+  MemoMessage.SetFocus;
 end;
 
 procedure TFormChat.FormClose(Sender: TObject; var CloseAction: TCloseAction);
@@ -88,17 +90,29 @@ begin
   FormMain.ChatClose(TargetID);
 end;
 
-procedure TFormChat.FormShow(Sender: TObject);
+procedure TFormChat.FormKeyDown(Sender: TObject; var Key: Word;
+  Shift: TShiftState);
 begin
-  Memo1.SetFocus;
+  if Shift = [ssCtrl, ssShift] then
+  begin
+    if Key = VK_F then
+      MenuShareClick(Sender);
+    if Key = VK_I then
+      MenuInviteClick(Sender);
+  end;
 end;
 
-procedure TFormChat.Memo1KeyPress(Sender: TObject; var Key: char);
+procedure TFormChat.FormShow(Sender: TObject);
+begin
+  MemoMessage.SetFocus;
+end;
+
+procedure TFormChat.MemoMessageKeyPress(Sender: TObject; var Key: char);
 begin
   if Key = #13 then
   begin
     Key := #0;
-    Button1Click(Sender);
+    ButtonSendClick(Sender);
   end;
 end;
 
@@ -119,7 +133,6 @@ procedure TFormChat.MenuShareClick(Sender: TObject);
 begin
   FormFileList.Share := TargetID;
   FormFileList.Show;
-  FormFileList.ButtonRefreshClick(nil);
 end;
 
 procedure TFormChat.RichView1Jump(Sender: TObject; id: Integer);
@@ -140,10 +153,11 @@ end;
 procedure TFormChat.RichView1KeyDown(Sender: TObject; var Key: Word;
   Shift: TShiftState);
 begin
-  if (Shift = [ssCtrl]) and (Key = Ord('C')) then
+  if (Shift = [ssCtrl]) and (Key = VK_C) then
   begin
     RichView1.CopyText;
-  end;
+  end else
+    FormKeyDown(Sender, Key, Shift);
 end;
 
 procedure TFormChat.SetUser(from, target: String);
@@ -220,46 +234,51 @@ begin
     RichView1.FormatTail;
     RichView1.Invalidate;
     if not Showing then Show;
-  end
-  else if (cmd = 'FILE') then
+  end;
+end;
+
+procedure TFormChat.RecvFile(aMsg, filename, mime: String; size, expire: DWord);
+var
+  from, target, seq, msg: String;
+  cut: Integer;
+  textAlign: TRVAlign;
+  date: TDateTime;
+begin
+  cut := Pos('|', aMsg);
+  if cut = 0 then exit;
+  seq := Copy(aMsg, 1, cut - 1);
+  Delete(aMsg, 1, cut);
+  cut := Pos('|', aMsg);
+  if cut = 0 then exit;
+  target := Copy(aMsg, 1, cut - 1);
+  from := Copy(aMsg, cut + 1, Length(aMsg));
+
+  if (from = FromID) then
   begin
-    cut := Pos('|', aMsg);
-    if cut = 0 then exit;
-    target := Copy(aMsg, 7, cut - 7);
-    Delete(aMsg, 1, cut);
-    cut := Pos('|', aMsg);
-    if cut = 0 then exit;
-    from := Copy(aMsg, 1, cut - 1);
-    Delete(aMsg, 1, cut);
-
-    if (from = FromID) then
-    begin
-      textAlign := rvalLeft;
-    end
-    else
-    begin
-      textAlign := rvalRight;
-    end;
-
-    from := FormMain.GetNick(from);
-    RichView1.AddTextFromNewLine(from, 0, textAlign);
-    RichView1.AddTextFromNewLine('Download: ' + aMsg, rvsJump1, textAlign);
-
-    RichView1.FormatTail;
-    RichView1.Invalidate;
-    if not Showing then Show;
-
-    JumpSeq.Add(aMsg);
+    textAlign := rvalLeft;
   end
   else
   begin
-    Delete(aMsg, 1, 6);
-    RichView1.AddTextFromNewLine(aMsg, rvsJump1);
-
-    RichView1.FormatTail;
-    RichView1.Invalidate;
-    if not Showing then Show;
+    textAlign := rvalRight;
   end;
+
+  date := UnixToDateTime(expire);
+  date := UniversalTimeToLocal(date);
+  ShortDateFormat := 'yy-mm-dd';
+  LongTimeFormat := 'hh:nn';
+  msg := DateTimeToStr(date);
+
+  from := FormMain.GetNick(from);
+  RichView1.AddTextFromNewLine(from, 0, textAlign);
+  RichView1.AddTextFromNewLine('Download: ' + filename, rvsJump1, textAlign);
+  RichView1.AddTextFromNewLine('Size: ' + IntToStr(size), 0, textAlign);
+  RichView1.AddTextFromNewLine('Expire: ' + msg, 0, textAlign);
+
+  RichView1.FormatTail;
+  RichView1.Invalidate;
+  if not Showing then Show;
+
+  JumpSeq.Add(seq);
 end;
 
 end.

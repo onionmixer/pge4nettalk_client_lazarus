@@ -8,18 +8,18 @@ object FormLogin: TFormLogin
   ClientWidth = 253
   OnShow = FormShow
   Position = poMainFormCenter
-  LCLVersion = '1.1'
+  LCLVersion = '1.2.6.0'
   object Label1: TLabel
     Left = 16
-    Height = 15
+    Height = 17
     Top = 17
-    Width = 11
+    Width = 12
     Caption = 'ID'
     ParentColor = False
   end
   object Label2: TLabel
     Left = 16
-    Height = 15
+    Height = 17
     Top = 50
     Width = 48
     Caption = '비밀번호'
@@ -27,17 +27,19 @@ object FormLogin: TFormLogin
   end
   object EditID: TEdit
     Left = 72
-    Height = 23
+    Height = 27
     Top = 14
     Width = 80
+    OnKeyPress = EditIDKeyPress
     TabOrder = 0
   end
   object EditPassWord: TEdit
     Left = 72
-    Height = 23
+    Height = 27
     Top = 48
     Width = 80
     EchoMode = emPassword
+    OnKeyPress = EditPassWordKeyPress
     PasswordChar = '*'
     TabOrder = 1
   end
@@ -50,4 +52,4 @@ object FormLogin: TFormLogin
     OnClick = ButtonLoginClick
     TabOrder = 2
   end
-end
+end

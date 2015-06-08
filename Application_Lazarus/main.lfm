@@ -12,8 +12,8 @@ object FormMain: TFormMain
   LCLVersion = '1.2.6.0'
   object TreeView1: TTreeView
     Left = 0
-    Height = 348
-    Top = 29
+    Height = 377
+    Top = 0
     Width = 269
     Align = alClient
     DefaultItemHeight = 18
@@ -22,16 +22,6 @@ object FormMain: TFormMain
     TabOrder = 0
     OnDblClick = TreeView1DblClick
     Options = [tvoAutoItemHeight, tvoHideSelection, tvoKeepCollapsedNodes, tvoReadOnly, tvoShowButtons, tvoShowLines, tvoShowRoot, tvoToolTips, tvoThemedDraw]
-  end
-  object ComboBox1: TComboBox
-    Left = 0
-    Height = 29
-    Top = 0
-    Width = 269
-    Align = alTop
-    ItemHeight = 0
-    TabOrder = 1
-    Text = 'ComboBox1'
   end
   object StatusBar1: TStatusBar
     Left = 0
@@ -54,9 +44,9 @@ object FormMain: TFormMain
         Caption = '&Connect...'
         OnClick = MenuConnectClick
       end
-      object MenuItemFileList: TMenuItem
+      object MenuFileList: TMenuItem
         Caption = '&File List...'
-        OnClick = MenuItemFileListClick
+        OnClick = MenuFileListClick
       end
       object MenuExit: TMenuItem
         Caption = 'E&xit'

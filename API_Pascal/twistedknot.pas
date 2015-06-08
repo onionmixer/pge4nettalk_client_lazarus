@@ -1182,6 +1182,9 @@ var
   sender: TTwistedKnotSender;
   key: AnsiString;
 begin
+  if (Data = nil) or (Len = 0) then
+    exit;
+
   fSection.Acquire;
   StreamID := fNextStreamID;
   fNextStreamID := (fNextStreamID + 1) and $FFFFFFFF;
