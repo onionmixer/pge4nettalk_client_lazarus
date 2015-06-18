@@ -262,6 +262,7 @@ begin
       for i := 2 to tt.args.Count - 1 do
         fUsers.Add(tt.args[i]);
     end;
+    from := FormMain.GetNick(from);
     message := 'invite user ' + from;
 
     RichView1.AddTextFromNewLine(message, 0, rvalCenter);

@@ -130,7 +130,11 @@ begin
   else if fType = CargoCompanyTypeShare then
   begin
     fSeq := packet.getNumber;
-    fUser := packet.getNumber;
+    count := packet.getNumber;
+    fFiles := TStringList.Create;
+    for i := 1 to count do begin
+      fFiles.Add(IntToStr(packet.getNumber));
+    end;
   end
   else if fType = CargoCompanyTypeList then
   begin
@@ -176,6 +180,7 @@ function TCargoCompany.getData(var size: DWord): Pointer;
 var
   packet: TTwistedKnotPacket;
   ptr: Pointer;
+  i: Integer;
 begin
   packet := TTwistedKnotPacket.Create;
 
@@ -209,7 +214,16 @@ begin
   else if fType = CargoCompanyTypeShare then
   begin
     packet.putNumber(fSeq);
-    packet.putNumber(fUser);
+    if (fFiles = nil) or (fFiles.Count = 0) then
+    begin
+      packet.putNumber(0);
+    end
+    else
+    begin
+      packet.putNumber(fFiles.Count);
+      for i := 0 to fFiles.Count - 1 do
+        packet.putNumber(StrToInt(fFiles[i]));
+    end;
   end
   else if fType = CargoCompanyTypeList then
   begin
