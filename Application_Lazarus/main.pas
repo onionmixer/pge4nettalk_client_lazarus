@@ -77,7 +77,7 @@ implementation
 {$R *.lfm}
 
 uses
-  login, filelist, DateUtils, LazUTF8Classes,
+  login, filelist, DateUtils, LCLType, LazUTF8Classes,
   OZFTalkTo, Session, CargoCompany;
 
 { TFormMain }
@@ -385,6 +385,7 @@ var
   data: Pointer;
   str, seq, filename, sizestr, mime, expire, user: String;
   date: TDateTime;
+  cont: Boolean;
 begin
   cargo := TCargoCompany.Create(Receiver.Buffer, Receiver.Length);
 
@@ -399,7 +400,10 @@ begin
   else if cargo.Command = CargoCompanyTypeUpload then
   begin
     SaveDialog1.FileName := cargo.Name;
-    if SaveDialog1.Execute then
+    cont := SaveDialog1.Execute;
+    if cont And FileExistsUTF8(SaveDialog1.FileName) then
+      cont := Application.MessageBox('Overwrite exists file?', 'Overwrite', MB_YESNO) = IDYES;
+    if cont then
     begin
       try
         fsOut := TFileStreamUTF8.Create(SaveDialog1.FileName, fmCreate);
@@ -408,11 +412,11 @@ begin
 
         if cargo.ContentSize <> size then
         begin
-          Application.MessageBox('Not enough space', 'Confirm', 0);
+          Application.MessageBox('Not enough space', 'Confirm', MB_ICONERROR);
         end;
       except
         on E: Exception do
-          Application.MessageBox(PChar(E.Message), 'File I/O Error', 0);
+          Application.MessageBox(PChar(E.Message), 'File I/O Error', MB_ICONERROR);
       end;
     end;
   end
