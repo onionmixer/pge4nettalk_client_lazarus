@@ -10,6 +10,8 @@ object FormChat: TFormChat
   OnClose = FormClose
   OnCreate = FormCreate
   OnDestroy = FormDestroy
+  OnDragDrop = FormDragDrop
+  OnDragOver = FormDragOver
   OnKeyDown = FormKeyDown
   OnShow = FormShow
   Position = poDefaultPosOnly
@@ -24,6 +26,8 @@ object FormChat: TFormChat
     Align = alClient
     Tracking = True
     VScrollVisible = True
+    OnDragDrop = FormDragDrop
+    OnDragOver = FormDragOver
     OnKeyDown = RichView1KeyDown
     FirstJumpNo = 0
     OnJump = RichView1Jump
@@ -66,6 +70,8 @@ object FormChat: TFormChat
       Align = alRight
       Caption = 'Send'
       OnClick = ButtonSendClick
+      OnDragDrop = FormDragDrop
+      OnDragOver = FormDragOver
       OnKeyDown = FormKeyDown
       TabOrder = 0
     end
@@ -75,6 +81,8 @@ object FormChat: TFormChat
       Top = 0
       Width = 344
       Align = alClient
+      OnDragDrop = FormDragDrop
+      OnDragOver = FormDragOver
       OnKeyDown = FormKeyDown
       OnKeyPress = MemoMessageKeyPress
       TabOrder = 1

@@ -17,6 +17,7 @@ object FormMain: TFormMain
     Width = 269
     Align = alClient
     DefaultItemHeight = 18
+    DragMode = dmAutomatic
     ReadOnly = True
     ScrollBars = ssAutoBoth
     TabOrder = 0

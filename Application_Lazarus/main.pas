@@ -194,7 +194,7 @@ var
   user: String;
 begin
   if TreeView1.Selected = nil then exit;
-  User := IntToStr(Integer(TreeView1.Selected.Data));
+  User := IntToStr(PtrInt(TreeView1.Selected.Data));
   if User = fUser then exit;
   ChatForm(User).Show;
 end;

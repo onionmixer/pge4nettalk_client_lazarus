@@ -85,6 +85,7 @@
         <Filename Value="invite.pas"/>
         <IsPartOfProject Value="True"/>
         <ComponentName Value="FormInvite"/>
+        <HasResources Value="True"/>
         <ResourceBaseClass Value="Form"/>
         <UnitName Value="invite"/>
       </Unit6>

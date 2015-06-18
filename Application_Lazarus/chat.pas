@@ -6,7 +6,7 @@ interface
 
 uses
   Classes, SysUtils, FileUtil, RichView, RVStyle, Forms, Controls, Graphics,
-  Dialogs, ExtCtrls, StdCtrls, Menus, OZFTalkTo;
+  Dialogs, ExtCtrls, StdCtrls, ComCtrls, Menus, OZFTalkTo;
 
 type
 
@@ -29,6 +29,9 @@ type
     procedure FormClose(Sender: TObject; var CloseAction: TCloseAction);
     procedure FormCreate(Sender: TObject);
     procedure FormDestroy(Sender: TObject);
+    procedure FormDragDrop(Sender, Source: TObject; X, Y: Integer);
+    procedure FormDragOver(Sender, Source: TObject; X, Y: Integer;
+      State: TDragState; var Accept: Boolean);
     procedure FormKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
     procedure FormShow(Sender: TObject);
     procedure MemoMessageKeyPress(Sender: TObject; var Key: char);
@@ -110,6 +113,50 @@ begin
   if Assigned(fUsers) then
     FreeAndNil(fUsers);
   FormMain.ChatClose(fTargetID);
+end;
+
+procedure TFormChat.FormDragDrop(Sender, Source: TObject; X, Y: Integer);
+var
+  TreeView: TTreeView;
+  User: String;
+  tt: TTalkTo;
+  data: Pointer;
+  size: DWord;
+begin
+  if not (Source is TTreeView) then exit;
+  TreeView := Source as TTreeView;
+  if TreeView.Selected = nil then exit;
+  User := IntToStr(PtrInt(TreeView.Selected.Data));
+
+  if not Assigned(fUsers) then
+  begin
+    fUsers := TStringList.Create;
+    fUsers.Sorted := True;
+    fUsers.Duplicates := dupIgnore;
+    if fFromID <> '' then
+      fUsers.Add(fFromID);
+    if fTargetID <> '' then
+      fUsers.Add(fTargetID);
+  end;
+
+  if fUsers.IndexOf(User) >= 0 then exit;
+
+  tt := TTalkTo.Create;
+  tt.functionID := TalkToFunctionIDGroupInvite;
+  tt.args := TStringList.Create;
+  tt.args.add(fTargetID);
+  tt.args.add(User);
+
+  data := tt.getData(size);
+  FreeAndNil(tt);
+
+  FormMain.SendData(data, size, TalkToID);
+end;
+
+procedure TFormChat.FormDragOver(Sender, Source: TObject; X, Y: Integer;
+  State: TDragState; var Accept: Boolean);
+begin
+  Accept := (Source is TTreeView);
 end;
 
 procedure TFormChat.FormKeyDown(Sender: TObject; var Key: Word;
