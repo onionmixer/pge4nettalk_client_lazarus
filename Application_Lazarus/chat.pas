@@ -97,6 +97,8 @@ end;
 
 procedure TFormChat.FormCreate(Sender: TObject);
 begin
+  FromID := '';
+  TargetID := '';
   JumpSeq := TStringList.Create;
   fUsers := nil;
 end;
@@ -198,8 +200,10 @@ begin
   if (target[1] = '#') and not Assigned(fUsers) then
   begin
     fUsers := TStringList.Create;
-    fUsers.Add(FromID);
-    fUsers.Add(TargetID);
+    if FromID <> '' then
+      fUsers.Add(FromID);
+    if TargetID <> '' then
+      fUsers.Add(TargetID);
   end;
   FromID := from;
   TargetID := target;
@@ -261,6 +265,10 @@ begin
     begin
       for i := 2 to tt.args.Count - 1 do
         fUsers.Add(tt.args[i]);
+    end
+    else
+    begin
+      fUsers.Add(from);
     end;
     from := FormMain.GetNick(from);
     message := 'invite user ' + from;

@@ -193,14 +193,14 @@ begin
     form := FormMain.ChatForm(fShare, False);
     if Assigned(form) then
     begin
-      cargo.Files := TStringList.Create;
-      cargo.Files.AddStrings(form.Users);
+      cargo.Args := TStringList.Create;
+      cargo.Args.AddStrings(form.Users);
     end;
   end
   else
   begin
-    cargo.Files := TStringList.Create;
-    cargo.Files.Add(fShare);
+    cargo.Args := TStringList.Create;
+    cargo.Args.Add(fShare);
   end;
 
   data := cargo.getData(size);

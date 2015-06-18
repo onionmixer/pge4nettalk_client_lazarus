@@ -43,7 +43,7 @@ type
     fContent: Pointer;
     fContentSize: DWord;
     fUser: DWord;
-    fFiles: TStrings;
+    fArgs: TStrings;
   public
     constructor Create;
     constructor Create(data: Pointer; size: DWord);
@@ -62,7 +62,7 @@ type
     property Content: Pointer read fContent write fContent;
     property ContentSize: DWord read fContentSize write fContentSize;
     property User: DWord read fUser write fUser;
-    property Files: TStrings read fFiles write fFiles;
+    property Args: TStrings read fArgs write fArgs;
   end;
 
 implementation
@@ -78,7 +78,7 @@ begin
   fName := '';
   fContent := nil;
   fContentSize := 0;
-  fFiles := nil;
+  fArgs := nil;
 end;
 
 constructor TCargoCompany.Create(data: Pointer; size: DWord);
@@ -93,7 +93,7 @@ begin
   fName := '';
   fContent := nil;
   fContentSize := 0;
-  fFiles := nil;
+  fArgs := nil;
 
   packet := TTwistedKnotPacket.Create(data, size);
 
@@ -131,21 +131,21 @@ begin
   begin
     fSeq := packet.getNumber;
     count := packet.getNumber;
-    fFiles := TStringList.Create;
+    fArgs := TStringList.Create;
     for i := 1 to count do begin
-      fFiles.Add(IntToStr(packet.getNumber));
+      fArgs.Add(IntToStr(packet.getNumber));
     end;
   end
   else if fType = CargoCompanyTypeList then
   begin
     count := packet.getNumber;
-    fFiles := TStringList.Create;
+    fArgs := TStringList.Create;
     for i := 1 to count do begin
-      fFiles.Add(IntToStr(packet.getNumber));
-      fFiles.Add(packet.getString);
-      fFiles.Add(IntToStr(packet.getNumber));
-      fFiles.Add(packet.getString);
-      fFiles.Add(IntToStr(packet.getNumber));
+      fArgs.Add(IntToStr(packet.getNumber));
+      fArgs.Add(packet.getString);
+      fArgs.Add(IntToStr(packet.getNumber));
+      fArgs.Add(packet.getString);
+      fArgs.Add(IntToStr(packet.getNumber));
     end;
   end
   else if fType = CargoCompanyTypeStat then
@@ -169,10 +169,10 @@ begin
     fContentSize := 0;
   end;
 
-  if Assigned(fFiles) then
+  if Assigned(fArgs) then
   begin
-    fFiles.Free;
-    fFiles := nil;
+    fArgs.Free;
+    fArgs := nil;
   end;
 end;
 
@@ -214,15 +214,15 @@ begin
   else if fType = CargoCompanyTypeShare then
   begin
     packet.putNumber(fSeq);
-    if (fFiles = nil) or (fFiles.Count = 0) then
+    if (fArgs = nil) or (fArgs.Count = 0) then
     begin
       packet.putNumber(0);
     end
     else
     begin
-      packet.putNumber(fFiles.Count);
-      for i := 0 to fFiles.Count - 1 do
-        packet.putNumber(StrToInt(fFiles[i]));
+      packet.putNumber(fArgs.Count);
+      for i := 0 to fArgs.Count - 1 do
+        packet.putNumber(StrToInt(fArgs[i]));
     end;
   end
   else if fType = CargoCompanyTypeList then

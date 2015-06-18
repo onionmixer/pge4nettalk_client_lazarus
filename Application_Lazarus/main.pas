@@ -506,13 +506,13 @@ begin
     list := FormFileList.ListView1;
     list.BeginUpdate;
 
-    for i := 0 to (cargo.Files.count div 5) - 1 do
+    for i := 0 to (cargo.Args.count div 5) - 1 do
     begin
-      seq := cargo.Files[i * 5];
-      filename := cargo.Files[i * 5 + 1];
-      sizestr := cargo.Files[i * 5 + 2];
-      mime := cargo.Files[i * 5 + 3];
-      expire := cargo.Files[i * 5 + 4];
+      seq := cargo.Args[i * 5];
+      filename := cargo.Args[i * 5 + 1];
+      sizestr := cargo.Args[i * 5 + 2];
+      mime := cargo.Args[i * 5 + 3];
+      expire := cargo.Args[i * 5 + 4];
       date := UnixToDateTime(StrToInt(expire));
       date := UniversalTimeToLocal(date);
       ShortDateFormat := 'yy-mm-dd';
@@ -539,7 +539,7 @@ begin
     for i := list.Items.Count - 1 downto 0 do
     begin
       filename := list.Items[i].Caption;
-      if cargo.Files.IndexOf(filename) = -1 then
+      if cargo.Args.IndexOf(filename) = -1 then
         list.Items[i].Delete;
     end;
 
