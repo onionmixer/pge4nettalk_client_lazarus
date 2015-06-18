@@ -7,7 +7,7 @@ interface
 uses
   Classes, SysUtils, FileUtil, Forms, Controls, Graphics, Dialogs, Menus,
   ComCtrls, StdCtrls, ExtCtrls, Contnrs, syncobjs, LMessages, ChatLabel,
-  NetworkInterface, chat, transfer;
+  NetworkInterface, TwistedKnot, chat, cDataStructs;
 
 type
 
@@ -40,35 +40,30 @@ type
     fSendUser: TStringList;
     fRecvForm: TObjectList;
     fRecvUser: TStringList;
-    fFileList: TStringList;
+    fFileList: TSparseStringArray;
+    fNickList: TStringDictionary;
     fFormSync: TCriticalSection;
 
     fLeftSkin, fRightSkin, fSelectSkin: TChatSkin;
 
     procedure OnReceive(var Msg: TLMessage); message NI_RECEIVE;
-    procedure OnTalkTo(aMsg: String);
-    procedure OnSession(aMsg: String);
-    procedure OnCargoCompany(aMsg: String);
     procedure OnStatus(var Msg: TLMessage); message NI_STATUS;
+    procedure OnTalkTo(Receiver: TTwistedKnotReceiver);
+    procedure OnSession(Receiver: TTwistedKnotReceiver);
+    procedure OnCargoCompany(Receiver: TTwistedKnotReceiver);
     procedure UpdateUserInfo(User, Nick, Group, Status, Image: String);
+    procedure ChatCloseAll;
+    function GetConnected: Boolean;
   public
     { public declarations }
     procedure SignIn(User: String; Password: String);
-    procedure SendMsg(aMsg: string);
-    procedure SendData(data: Pointer; size, toAddress: DWord);
-    function Connected: Boolean;
+    procedure Join(Room: String; User:String);
     function ChatForm(User: String; Add: Boolean = True): TFormChat;
     procedure ChatClose(User: String);
-    procedure ChatCloseAll;
-    procedure Join(Room: String; User:String);
-    function SendForm(User: String; ID: String): TFormTransfer;
-    procedure SendClose(User: String; ID: String);
-    function SendDropMsg(User: String): Boolean;
-    function RecvForm(User: String; ID: String): TFormTransfer;
-    procedure RecvClose(User: String; ID: String);
+    function SendData(data: Pointer; size, toAddress: DWord):DWord;
     function GetNick(User: String): String;
-    procedure OnDebug(Sender: TObject; aMsg: String);
 
+    property Connected: Boolean read GetConnected;
     property LeftSkin: TChatSkin read fLeftSkin;
     property RightSkin: TChatSkin read fRightSkin;
     property SelectSkin: TChatSkin read fSelectSkin;
@@ -83,7 +78,7 @@ implementation
 
 uses
   login, filelist, DateUtils, LazUTF8Classes,
-  TwistedKnot, Session, CargoCompany;
+  OZFTalkTo, Session, CargoCompany;
 
 { TFormMain }
 
@@ -93,10 +88,19 @@ begin
 end;
 
 procedure TFormMain.MenuConnectClick(Sender: TObject);
+var
+  tt: TTalkTo;
+  size: DWord;
+  data: Pointer;
 begin
   if fAuth then
   begin
-    SendMsg('QUIT');
+    tt := TTalkTo.Create;
+    tt.functionID := TalkToFunctionIDQuit;
+
+    data := tt.getData(size);
+    tt.Free;
+    SendData(data, size, TalkToID);
   end
   else
   begin
@@ -124,7 +128,8 @@ begin
   fSendUser := TStringList.Create;
   fRecvForm := TObjectList.Create;
   fRecvUser := TStringList.Create;
-  fFileList := TStringList.Create;
+  fFileList := TSparseStringArray.Create;
+  fNickList := TStringDictionary.Create;
 
   MenuConnect.Caption := '&Connect...';
   MenuFileList.Enabled := False;
@@ -148,10 +153,19 @@ end;
 
 procedure TFormMain.FormDestroy(Sender: TObject);
 var
+  tt: TTalkTo;
+  size: DWord;
+  data: Pointer;
   i: Integer;
   Chat: TFormChat;
 begin
-  SendMsg('QUIT');
+  tt := TTalkTo.Create;
+  tt.functionID := TalkToFunctionIDQuit;
+
+  data := tt.getData(size);
+  tt.Free;
+  SendData(data, size, TalkToID);
+
   fCubeConn.Free;
 
   for i := fChatForm.Count - 1 downto 0 do
@@ -169,6 +183,7 @@ begin
   fRecvUser.Free;
 
   fFileList.Free;
+  fNickList.Free;
 
   fFormSync.Free;
 end;
@@ -185,37 +200,49 @@ end;
 
 procedure TFormMain.OnReceive(var Msg: TLMessage);
 var
-  aMsg: String;
+  Receiver: TTwistedKnotReceiver;
   service: Word;
 begin
   while true do
   begin
-    aMsg := fCubeConn.getMessage;
-    if (aMsg = '') then
+    Receiver := fCubeConn.getReceiver;
+
+    if Receiver = nil then
       break;
 
-    service := (Ord(aMsg[1]) shl 8) or Ord(aMsg[2]);
+    if Receiver.Length < 2 then
+    begin
+      Receiver.Free;
+      continue;
+    end;
+
+    Move(Receiver.Buffer^, service, 2);
+    {$ifndef FPC_BIG_ENDIAN}
+    service := swap(service);
+    {$endif}
+
     if service = SessionID then
-      OnSession(aMsg)
-    else if service = $5454 then
-      OnTalkTo(aMsg)
+      OnSession(Receiver)
+    else if service = TalkToID then
+      OnTalkTo(Receiver)
     else if service = CargoCompanyID then
-      OnCargoCompany(aMsg);
+      OnCargoCompany(Receiver);
+
+    Receiver.Free;
   end;
 end;
 
-procedure TFormMain.OnTalkTo(aMsg: String);
+procedure TFormMain.OnTalkTo(Receiver: TTwistedKnotReceiver);
 var
-  cmd, sub: String;
-  cut: Integer;
-  user, room, nick, group, status, image, id: String;
+  tt: TTalkTo;
+  user, room, nick, group, status, image, seq: String;
   form: TFormChat;
   cargo: TCargoCompany;
   data: Pointer;
-  size: DWord;
+  size, uniqueID: DWord;
 begin
-  cmd := Copy(aMsg, 3, 4);
-  if (cmd = 'QUIT') then
+  tt := TTalkTo.Create(Receiver.Buffer, Receiver.Length);
+  if tt.functionID = TalkToFunctionIDQuit then
   begin
     if fAuth then
     begin
@@ -232,99 +259,112 @@ begin
       FormLogin.Fail;
     end;
   end
-  else if (cmd = 'AUTH') then
+  else if tt.functionID = TalkToFunctionIDAuth then
   begin
     fAuth := True;
-    fUser := Copy(aMsg, 7, 32);
+    fUser := tt.args[0];
     MenuConnect.Caption := 'Dis&connect';
     MenuFileList.Enabled := True;
     FormLogin.Hide;
     FormFileList.ButtonRefreshClick(nil);
   end
-  else if (cmd = 'STAT') then
+  else if tt.functionID = TalkToFunctionIDStat then
   begin
-    cut := Pos('|', aMsg);
-    user := Copy(aMsg, 7, cut - 7);
-    Delete(aMsg, 1, cut);
-    cut := Pos('|', aMsg);
-    nick := Copy(aMsg, 1, cut - 1);
-    Delete(aMsg, 1, cut);
-    cut := Pos('|', aMsg);
-    group := Copy(aMsg, 1, cut - 1);
-    Delete(aMsg, 1, cut);
-    cut := Pos('|', aMsg);
-    status := Copy(aMsg, 1, cut - 1);
-    Delete(aMsg, 1, cut);
-    image := aMsg;
+    user := tt.args[0];
+    nick := tt.args[1];
+    group := tt.args[2];
+    status := tt.args[3];
+    image := tt.args[4];
+    if status <> 'offline' then
+      fNickList[user] := nick
+    else if fNickList.HasKey(User) then
+      fNickList.Delete(user);
     updateUserInfo(user, nick, group, status, image);
     if user = fUser then
       Caption := 'Talk To - ' + nick;
   end
-  else if (cmd = 'MESG') then
+  else if tt.functionID = TalkToFunctionIDMessage then
   begin
-    cut := Pos('|', aMsg);
-    user := Copy(aMsg, 7, cut - 7);
+    user := tt.args[0];
     if user = fUser then
-    begin
-      user := Copy(aMsg, cut + 1, 32);
-      cut := Pos('|', user);
-      user := Copy(user, 1, cut - 1);
-    end;
-    ChatForm(user).RecvMsg(aMsg);
+      user := tt.args[1];
+    ChatForm(user).RecvMsg(tt);
   end
-  else if (cmd = 'JOIN') then
+  else if tt.functionID = TalkToFunctionIDGroupJoin then
   begin
-    cut := Pos('|', aMsg);
-    room := Copy(aMsg, 7, cut - 7);
-    Delete(aMsg, 1, cut);
-    user := aMsg;
+    room := tt.args[0];
+    user := tt.args[1];
     Join(room, user);
   end
-  else if (cmd = 'INVT') then
+  else if tt.functionID = TalkToFunctionIDGroupInvite then
   begin
-    cut := Pos('|', aMsg);
-    room := Copy(aMsg, 7, cut - 7);
-    user := Copy(aMsg, cut + 1, 32);
+    room := tt.args[0];
+    user := tt.args[1];
     if user = fUser then
-      ChatForm(room).RecvMsg(aMsg)
+    begin
+      ChatForm(room).RecvMsg(tt);
+    end
     else
     begin
       form := ChatForm(room, False);
       if form <> nil then
-        form.RecvMsg(aMsg);
+      begin
+        form.RecvMsg(tt);
+      end;
     end;
   end
-  else if (cmd = 'FILE') then
+  else if tt.functionID = TalkToFunctionIDGroupExit then
   begin
-    cut := Pos('|', aMsg);
-    room := Copy(aMsg, 7, cut - 7);
-    Delete(aMsg, 1, cut);
-
-    cut := Pos('|', aMsg);
-    user := Copy(aMsg, 1, cut - 1);
-    Delete(aMsg, 1, cut);
+    room := tt.args[0];
+    user := tt.args[1];
+    form := ChatForm(room, False);
+    if form <> nil then
+    begin
+      form.RecvMsg(tt);
+      if user = fUser then
+        form.Free;
+    end;
+  end
+  else if tt.functionID = TalkToFunctionIDFileShare then
+  begin
+    room := tt.args[0];
+    user := tt.args[1];
+    seq := tt.args[2];
 
     cargo := TCargoCompany.Create;
     cargo.Command := CargoCompanyTypeStat;
-    cargo.Seq := StrToInt(aMsg);
+    cargo.Seq := StrToInt(seq);
 
     data := cargo.getData(size);
-    SendData(data, size, $5454);
+    uniqueID := fCubeConn.getUniqueID;
+    fCubeConn.send(data, size, uniqueID, $5454);
     cargo.Free;
 
-    fFileList.Add(aMsg + '|' + room + '|' + user);
+    fFileList[uniqueID] := room + '|' + user;
   end;
+  if Assigned(tt) then
+    FreeAndNil(tt);
 end;
 
-procedure TFormMain.OnSession(aMsg: String);
+procedure TFormMain.OnSession(Receiver: TTwistedKnotReceiver);
 var
   response: TSession;
+  tt: TTalkTo;
+  size: DWord;
+  data: Pointer;
 begin
-  response := TSession.Create(PChar(aMsg), Length(aMsg));
+  response := TSession.Create(Receiver.Buffer, Receiver.Length);
   if response.functionID = SessionFunctionIDSignIn then
   begin
     if response.errorCode = SessionErrorCodeNone then
-      SendMsg('AUTH')
+    begin
+      tt := TTalkTo.Create;
+      tt.functionID := TalkToFunctionIDAuth;
+
+      data := tt.getData(size);
+      tt.Free;
+      SendData(data, size, TalkToID);
+    end
     else
     begin
       FormLogin.Show;
@@ -333,18 +373,20 @@ begin
   end;
 end;
 
-procedure TFormMain.OnCargoCompany(aMsg: String);
+procedure TFormMain.OnCargoCompany(Receiver: TTwistedKnotReceiver);
 var
+  tt: TTalkTo;
   cargo: TCargoCompany;
   fsOut: TFileStreamUTF8;
   list: TListView;
   item: TListItem;
   i, cut: Integer;
   size: DWord;
+  data: Pointer;
   str, seq, filename, sizestr, mime, expire, user: String;
   date: TDateTime;
 begin
-  cargo := TCargoCompany.Create(PChar(aMsg), Length(aMsg));
+  cargo := TCargoCompany.Create(Receiver.Buffer, Receiver.Length);
 
   if cargo.ErrorCode <> 0 then
   begin
@@ -411,24 +453,17 @@ begin
   else if (cargo.Command = CargoCompanyTypeResult) And
     (cargo.ResultType = CargoCompanyTypeStat) then
   begin
-    seq := IntToStr(cargo.Seq) + '|';
-    size := Length(seq);
-    for i := fFileList.Count - 1 downto 0 do
+    if fFileList.HasItem(Receiver.UniqueID) then
     begin
-      if Copy(fFileList[i], 1, size) <> seq then
-        continue;
-
-      str := fFileList[i];
-      Delete(str, 1, size);
+      str := fFileList[Receiver.UniqueID];
       cut := Pos('|', str);
       user := Copy(str, 1, cut - 1);
+      str := Copy(str, cut + 1, Length(str));
       if user = fUser then
-      begin
-        user := Copy(str, cut + 1, Length(str));
-      end;
-      ChatForm(user).RecvFile(fFileList[i], cargo.Name, cargo.Mime,
-        cargo.Size, cargo.Expire);
-      fFileList.Delete(i);
+        user := str;
+      ChatForm(user).RecvFile(str, cargo.Name, cargo.Mime,
+        cargo.Seq, cargo.Size, cargo.Expire);
+      fFileList.Delete(Receiver.UniqueID);
     end;
   end
   else if cargo.Command = CargoCompanyTypeRemove then
@@ -450,7 +485,21 @@ begin
   end
   else if cargo.Command = CargoCompanyTypeShare then
   begin
-    SendMsg('FILE' + IntToStr(cargo.User) + '|' + IntToStr(cargo.Seq));
+    user := FormFileList.GetSharedTarget(Receiver.UniqueID);
+    if user <> '' then
+    begin
+      tt := TTalkTo.Create;
+
+      tt.functionID := TalkToFunctionIDFileShare;
+      tt.args := TStringList.Create;
+      tt.args.Add(user);
+      tt.args.Add(IntToStr(cargo.Seq));
+
+      data := tt.getData(size);
+      FreeAndNil(tt);
+
+      SendData(data, size, TalkToID);
+    end;
   end
   else if cargo.Command = CargoCompanyTypeList then
   begin
@@ -580,12 +629,6 @@ begin
   request.Free;
 end;
 
-procedure TFormMain.OnDebug(Sender: TObject; aMsg: String);
-begin
-  if fChatForm.Count = 0 then exit;
-  (fChatForm[0] as TFormChat).RecvMsg('TTNONE' + aMsg);
-end;
-
 function TFormMain.ChatForm(User: String; Add: Boolean):TFormChat;
 var
   index: Integer;
@@ -654,7 +697,7 @@ begin
   end;
   fFormSync.Leave;
 end;
-
+{
 function TFormMain.SendForm(User: String; ID: String): TFormTransfer;
 var
   index: Integer;
@@ -749,44 +792,22 @@ begin
   end;
   fFormSync.Leave;
 end;
-
+}
 function TFormMain.GetNick(User: String): String;
-var
-  seq: Integer;
-  groupNode, userNode: TTreeNode;
 begin
-  Result := User;
-  seq := StrToInt(User);
-  groupNode := TreeView1.Items.GetFirstNode;
-  while groupNode <> nil do
-  begin
-    userNode := groupNode.GetFirstChild;
-    while (userNode <> nil) And (userNode.Data <> Pointer(seq)) do
-      userNode := userNode.GetNextSibling;
-    if userNode <> nil then
-    begin
-      Result := userNode.Text;
-      exit;
-    end;
-    groupNode := groupNode.GetNextSibling;
-  end;
+  if fNickList.HasKey(User) then
+    Result := fNickList[User]
+  else
+    Result := User;
 end;
 
-procedure TFormMain.SendMsg(aMsg: string);
-var
-  packet: AnsiString;
-  ptr: Pointer;
+function TFormMain.SendData(data: Pointer; size, toAddress: DWord): DWord;
 begin
-  packet := 'TT' + aMsg;
-  fCubeConn.Send(Pointer(packet), Length(packet), fCubeConn.getUniqueID, $5454);
+  Result := fCubeConn.getUniqueID;
+  fCubeConn.send(data, size, Result, toAddress);
 end;
 
-procedure TFormMain.SendData(data: Pointer; size, toAddress: DWord);
-begin
-  fCubeConn.send(data, size, fCubeConn.getUniqueID, toAddress);
-end;
-
-function TFormMain.Connected: Boolean;
+function TFormMain.GetConnected: Boolean;
 begin
   Result := fCubeConn.Connected;
 end;

@@ -6,6 +6,8 @@ object FormFileList: TFormFileList
   Caption = 'File List'
   ClientHeight = 240
   ClientWidth = 327
+  OnCreate = FormCreate
+  OnDestroy = FormDestroy
   LCLVersion = '1.2.6.0'
   object ListView1: TListView
     Left = 8

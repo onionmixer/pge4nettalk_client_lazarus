@@ -1,0 +1,3 @@
+[submodule "External/fundamentals"]
+	path = External/fundamentals
+	url = https://github.com/fundamentalslib/fundamentals.git

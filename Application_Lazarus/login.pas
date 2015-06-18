@@ -36,7 +36,7 @@ implementation
 
 {$R *.lfm}
 
-uses main;
+uses main, OZFTalkTo;
 
 { TFormLogin }
 
@@ -84,7 +84,7 @@ end;
 procedure TFormLogin.Retry;
 begin
   if FormMain.Connected then
-    FormMain.SendMsg('AUTH' + EditID.Text + '|' + EditPassWord.Text);
+    FormMain.SignIn(EditID.Text, EditPassword.Text);
 end;
 
 end.

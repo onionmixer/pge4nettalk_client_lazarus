@@ -33,7 +33,7 @@ type
     procedure Reconnect;
     procedure Close;
     procedure send(Data: Pointer; Len: Integer; UniqueID, toAddress:DWord);
-    function getMessage:String;
+    function getReceiver: TTwistedKnotReceiver;
 
     function getUniqueID:DWord;
 
@@ -168,27 +168,17 @@ begin
   fConnection.Send(Data, Len, UniqueID, toAddress);
 end;
 
-function TNetworkInterface.getMessage: String;
-var
-  Receiver: TTwistedKnotReceiver;
+function TNetworkInterface.getReceiver: TTwistedKnotReceiver;
 begin
-  Result := '';
-  Receiver := nil;
+  Result := nil;
 
   fSection.Acquire;
   if fReceivers.Count > 0 then
   begin
-    Receiver := TTwistedKnotReceiver(fReceivers.Items[0]);
+    Result := TTwistedKnotReceiver(fReceivers.Items[0]);
     fReceivers.Delete(0);
   end;
   fSection.Release;
-
-  if Receiver = nil then
-    exit;
-
-  SetLength(Result, Receiver.Length);
-  Move(Receiver.Buffer^, PChar(Result)^, Receiver.Length);
-  Receiver.Free;
 end;
 
 function TNetworkInterface.getUniqueID: DWord;

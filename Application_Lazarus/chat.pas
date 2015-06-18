@@ -6,7 +6,7 @@ interface
 
 uses
   Classes, SysUtils, FileUtil, RichView, RVStyle, Forms, Controls, Graphics,
-  Dialogs, ExtCtrls, StdCtrls, Menus;
+  Dialogs, ExtCtrls, StdCtrls, Menus, OZFTalkTo;
 
 type
 
@@ -42,12 +42,15 @@ type
     { private declarations }
     FromID: String;
     TargetID: String;
+    fUsers: TStrings;
     JumpSeq: TStrings;
   public
     { public declarations }
     procedure SetUser(from, target: String);
-    procedure RecvMsg(aMsg: String);
-    procedure RecvFile(aMsg, filename, mime: String; size, expire: DWord);
+    procedure RecvMsg(tt: TTalkTo);
+    procedure RecvFile(from, filename, mime: String; seq, size, expire: DWord);
+
+    property Users: TStrings read fUsers;
   end;
 
 //var
@@ -63,13 +66,25 @@ uses main, filelist, ChatLabel, CargoCompany, LCLType, DateUtils;
 
 procedure TFormChat.ButtonSendClick(Sender: TObject);
 var
-  aMsg: String;
+  message: String;
+  tt: TTalkTo;
+  size: DWord;
+  data: Pointer;
 begin
-  aMsg := TrimRight(MemoMessage.Text);
-  if aMsg <> '' then
+  message := TrimRight(MemoMessage.Text);
+  if message <> '' then
   begin
-    aMsg := 'MESG' + TargetID + '|' + aMsg;
-    FormMain.SendMsg(aMsg);
+    tt := TTalkTo.Create;
+    tt.functionID := TalkToFunctionIDMessage;
+    tt.args := TStringList.Create;
+    tt.args.add(TargetID);
+    tt.args.add(message);
+
+    data := tt.getData(size);
+    FreeAndNil(tt);
+
+    FormMain.SendData(data, size, TalkToID);
+
     MemoMessage.Clear;
   end;
   MemoMessage.SetFocus;
@@ -83,10 +98,15 @@ end;
 procedure TFormChat.FormCreate(Sender: TObject);
 begin
   JumpSeq := TStringList.Create;
+  fUsers := nil;
 end;
 
 procedure TFormChat.FormDestroy(Sender: TObject);
 begin
+  if Assigned(JumpSeq) then
+    FreeAndNil(JumpSeq);
+  if Assigned(fUsers) then
+    FreeAndNil(fUsers);
   FormMain.ChatClose(TargetID);
 end;
 
@@ -124,9 +144,22 @@ end;
 procedure TFormChat.MenuInviteClick(Sender: TObject);
 var
   invite: String;
+  tt: TTalkTo;
+  size: DWord;
+  data: Pointer;
 begin
   invite := InputBox('Invite', 'Invite user', '');
-  FormMain.SendMsg('INVT'+TargetID + '|' + invite);
+
+  tt := TTalkTo.Create;
+  tt.functionID := TalkToFunctionIDGroupInvite;
+  tt.args := TStringList.Create;
+  tt.args.add(TargetID);
+  tt.args.add(invite);
+
+  data := tt.getData(size);
+  FreeAndNil(tt);
+
+  FormMain.SendData(data, size, TalkToID);
 end;
 
 procedure TFormChat.MenuShareClick(Sender: TObject);
@@ -162,31 +195,31 @@ end;
 
 procedure TFormChat.SetUser(from, target: String);
 begin
+  if (target[1] = '#') and not Assigned(fUsers) then
+  begin
+    fUsers := TStringList.Create;
+    fUsers.Add(FromID);
+    fUsers.Add(TargetID);
+  end;
   FromID := from;
   TargetID := target;
   Caption := 'Talk To - ' + FormMain.GetNick(target);
 end;
 
-procedure TFormChat.RecvMsg(aMsg: String);
+procedure TFormChat.RecvMsg(tt: TTalkTo);
 var
-  cmd, from, target: String;
-  cut: Integer;
+  from, target, message: String;
+  i: Integer;
   textAlign: TRVAlign;
   Chat: TChatLabel;
 begin
-  cmd := Copy(aMsg, 3, 4);
-  if (cmd = 'MESG') then
+  if tt.functionID = TalkToFunctionIDMessage then
   begin
-    cut := Pos('|', aMsg);
-    if cut = 0 then exit;
-    target := Copy(aMsg, 7, cut - 7);
-    Delete(aMsg, 1, cut);
-    cut := Pos('|', aMsg);
-    if cut = 0 then exit;
-    from := Copy(aMsg, 1, cut - 1);
-    Delete(aMsg, 1, cut);
+    target := tt.args[0];
+    from := tt.args[1];
+    message := tt.args[2];
 
-    if aMsg = '' then
+    if message = '' then
       exit;
 
     Chat := TChatLabel.Create(RichView1);
@@ -205,7 +238,7 @@ begin
     end;
     Chat.SelectSkin := FormMain.SelectSkin;
     Chat.SelectColor := $7ED3FF;
-    Chat.Caption := aMsg;
+    Chat.Caption := message;
 
     //RichView1.AddTextFromNewLine(from + ': ', rvsSubHeading, textAlign);
     //RichView1.AddHotSpot(0, ImageList1, False);
@@ -220,16 +253,33 @@ begin
     RichView1.Invalidate;
     if not Showing then Show;
   end
-  else if (cmd = 'INVT') then
+  else if tt.functionID = TalkToFunctionIDGroupInvite then
   begin
-    cut := Pos('|', aMsg);
-    if cut = 0 then exit;
-    target := Copy(aMsg, 7, cut - 7);
-    Delete(aMsg, 1, cut);
-    from := aMsg;
-    aMsg := 'invite user ' + from;
+    target := tt.args[0];
+    from := tt.args[1];
+    if tt.args.Count > 2 then
+    begin
+      for i := 2 to tt.args.Count - 1 do
+        fUsers.Add(tt.args[i]);
+    end;
+    message := 'invite user ' + from;
 
-    RichView1.AddTextFromNewLine(aMsg, 0, rvalCenter);
+    RichView1.AddTextFromNewLine(message, 0, rvalCenter);
+
+    RichView1.FormatTail;
+    RichView1.Invalidate;
+    if not Showing then Show;
+  end
+  else if tt.functionID = TalkToFunctionIDGroupExit then
+  begin
+    target := tt.args[0];
+    from := tt.args[1];
+    i := fUsers.IndexOf(from);
+    if i >= 0 then
+      fUsers.Delete(i);
+    message := 'exit user ' + from;
+
+    RichView1.AddTextFromNewLine(message, 0, rvalCenter);
 
     RichView1.FormatTail;
     RichView1.Invalidate;
@@ -237,22 +287,12 @@ begin
   end;
 end;
 
-procedure TFormChat.RecvFile(aMsg, filename, mime: String; size, expire: DWord);
+procedure TFormChat.RecvFile(from, filename, mime: String; seq, size, expire: DWord);
 var
-  from, target, seq, msg: String;
-  cut: Integer;
+  msg: String;
   textAlign: TRVAlign;
   date: TDateTime;
 begin
-  cut := Pos('|', aMsg);
-  if cut = 0 then exit;
-  seq := Copy(aMsg, 1, cut - 1);
-  Delete(aMsg, 1, cut);
-  cut := Pos('|', aMsg);
-  if cut = 0 then exit;
-  target := Copy(aMsg, 1, cut - 1);
-  from := Copy(aMsg, cut + 1, Length(aMsg));
-
   if (from = FromID) then
   begin
     textAlign := rvalLeft;
@@ -278,7 +318,7 @@ begin
   RichView1.Invalidate;
   if not Showing then Show;
 
-  JumpSeq.Add(seq);
+  JumpSeq.Add(IntToStr(seq));
 end;
 
 end.
