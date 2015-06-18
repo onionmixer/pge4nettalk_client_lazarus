@@ -67,6 +67,7 @@ type
     property LeftSkin: TChatSkin read fLeftSkin;
     property RightSkin: TChatSkin read fRightSkin;
     property SelectSkin: TChatSkin read fSelectSkin;
+    property NickList: TStringDictionary read fNickList;
   end;
 
 var

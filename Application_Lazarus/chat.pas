@@ -40,17 +40,17 @@ type
       Shift: TShiftState);
   private
     { private declarations }
-    FromID: String;
-    TargetID: String;
-    fUsers: TStrings;
-    JumpSeq: TStrings;
+    fFromID: String;
+    fTargetID: String;
+    fUsers: TStringList;
+    fJumpSeq: TStrings;
   public
     { public declarations }
     procedure SetUser(from, target: String);
     procedure RecvMsg(tt: TTalkTo);
     procedure RecvFile(from, filename, mime: String; seq, size, expire: DWord);
 
-    property Users: TStrings read fUsers;
+    property Users: TStringList read fUsers;
   end;
 
 //var
@@ -60,7 +60,7 @@ implementation
 
 {$R *.lfm}
 
-uses main, filelist, ChatLabel, CargoCompany, LCLType, DateUtils;
+uses main, invite, filelist, ChatLabel, CargoCompany, LCLType, DateUtils;
 
 { TFormChat }
 
@@ -77,7 +77,7 @@ begin
     tt := TTalkTo.Create;
     tt.functionID := TalkToFunctionIDMessage;
     tt.args := TStringList.Create;
-    tt.args.add(TargetID);
+    tt.args.add(fTargetID);
     tt.args.add(message);
 
     data := tt.getData(size);
@@ -97,19 +97,19 @@ end;
 
 procedure TFormChat.FormCreate(Sender: TObject);
 begin
-  FromID := '';
-  TargetID := '';
-  JumpSeq := TStringList.Create;
+  fFromID := '';
+  fTargetID := '';
+  fJumpSeq := TStringList.Create;
   fUsers := nil;
 end;
 
 procedure TFormChat.FormDestroy(Sender: TObject);
 begin
-  if Assigned(JumpSeq) then
-    FreeAndNil(JumpSeq);
+  if Assigned(fJumpSeq) then
+    FreeAndNil(fJumpSeq);
   if Assigned(fUsers) then
     FreeAndNil(fUsers);
-  FormMain.ChatClose(TargetID);
+  FormMain.ChatClose(fTargetID);
 end;
 
 procedure TFormChat.FormKeyDown(Sender: TObject; var Key: Word;
@@ -144,29 +144,29 @@ begin
 end;
 
 procedure TFormChat.MenuInviteClick(Sender: TObject);
-var
-  invite: String;
-  tt: TTalkTo;
-  size: DWord;
-  data: Pointer;
 begin
-  invite := InputBox('Invite', 'Invite user', '');
+  if not Assigned(fUsers) then
+  begin
+    fUsers := TStringList.Create;
+    fUsers.Sorted := True;
+    fUsers.Duplicates := dupIgnore;
+    if fFromID <> '' then
+      fUsers.Add(fFromID);
+    if fTargetID <> '' then
+      fUsers.Add(fTargetID);
+  end;
 
-  tt := TTalkTo.Create;
-  tt.functionID := TalkToFunctionIDGroupInvite;
-  tt.args := TStringList.Create;
-  tt.args.add(TargetID);
-  tt.args.add(invite);
-
-  data := tt.getData(size);
-  FreeAndNil(tt);
-
-  FormMain.SendData(data, size, TalkToID);
+  with TFormInvite.Create(self) do
+  begin
+    TargetID := fTargetID;
+    Setup(fUsers);
+    Show;
+  end;
 end;
 
 procedure TFormChat.MenuShareClick(Sender: TObject);
 begin
-  FormFileList.Share := TargetID;
+  FormFileList.Share := fTargetID;
   FormFileList.Show;
 end;
 
@@ -178,7 +178,7 @@ var
 begin
   cargo := TCargoCompany.Create;
   cargo.Command := CargoCompanyTypeDownload;
-  cargo.Seq := StrToInt(JumpSeq[id]);
+  cargo.Seq := StrToInt(fJumpSeq[id]);
 
   data := cargo.getData(size);
   FormMain.SendData(data, size, $5454);
@@ -200,13 +200,15 @@ begin
   if (target[1] = '#') and not Assigned(fUsers) then
   begin
     fUsers := TStringList.Create;
-    if FromID <> '' then
-      fUsers.Add(FromID);
-    if TargetID <> '' then
-      fUsers.Add(TargetID);
+    fUsers.Sorted := True;
+    fUsers.Duplicates := dupIgnore;
+    if fFromID <> '' then
+      fUsers.Add(fFromID);
+    if fTargetID <> '' then
+      fUsers.Add(fTargetID);
   end;
-  FromID := from;
-  TargetID := target;
+  fFromID := from;
+  fTargetID := target;
   Caption := 'Talk To - ' + FormMain.GetNick(target);
 end;
 
@@ -228,7 +230,7 @@ begin
 
     Chat := TChatLabel.Create(RichView1);
 
-    if (from = FromID) then
+    if (from = fFromID) then
     begin
       textAlign := rvalLeft;
       Chat.Skin := FormMain.LeftSkin;
@@ -302,7 +304,7 @@ var
   textAlign: TRVAlign;
   date: TDateTime;
 begin
-  if (from = FromID) then
+  if (from = fFromID) then
   begin
     textAlign := rvalLeft;
   end
@@ -327,7 +329,7 @@ begin
   RichView1.Invalidate;
   if not Showing then Show;
 
-  JumpSeq.Add(IntToStr(seq));
+  fJumpSeq.Add(IntToStr(seq));
 end;
 
 end.
