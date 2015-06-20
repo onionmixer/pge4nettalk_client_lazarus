@@ -100,6 +100,9 @@ end;
 
 procedure TFormMain.FormCreate(Sender: TObject);
 var
+  {$IFDEF WINDOWS}
+  OldGetAppName: TGetAppNameEvent;
+  {$ENDIF}
   Skin: TBitmap;
 begin
   {$IFDEF WINDOWS}
