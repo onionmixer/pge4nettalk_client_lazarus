@@ -64,7 +64,7 @@ implementation
 
 {$R *.lfm}
 
-uses main, invite, filelist, ChatLabel, CargoCompany, LCLType, DateUtils;
+uses main, invite, filelist, LazUTF8Classes, ChatLabel, CargoCompany, LCLType, DateUtils;
 
 { TFormChat }
 
@@ -167,7 +167,8 @@ var
 begin
   for FileName in FileNames do
   begin
-    FormMain.AddUpload(fTargetID, FileName);
+    if not DirectoryExistsUTF8(FileName) then
+      FormMain.AddUpload(fTargetID, FileName);
   end;
 end;
 

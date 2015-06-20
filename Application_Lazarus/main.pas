@@ -924,6 +924,12 @@ begin
       continue;
     end;
 
+    if DirectoryExistsUTF8(upload) then
+    begin
+      fUploadNow := False;
+      continue;
+    end;
+
     data := nil;
 
     try

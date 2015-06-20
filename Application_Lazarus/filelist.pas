@@ -40,7 +40,7 @@ implementation
 
 {$R *.lfm}
 
-uses main, chat, LazUTF8Classes, TwistedKnot, CargoCompany;
+uses main, chat, LCLType, LazUTF8Classes, TwistedKnot, CargoCompany;
 
 { TFormFileList }
 
@@ -64,7 +64,8 @@ var
 begin
   for FileName in FileNames do
   begin
-    FormMain.AddUpload(fShare, FileName);
+    if not DirectoryExistsUTF8(FileName) then
+      FormMain.AddUpload('', FileName);
   end;
 end;
 
@@ -100,7 +101,7 @@ var
 begin
   if ListView1.SelCount <> 1 then
   begin
-    Application.MessageBox('Select file in List', 'Confirm', 0);
+    Application.MessageBox('Select file in List', 'Confirm', MB_ICONWARNING);
     exit;
   end;
 
@@ -120,7 +121,7 @@ begin
 
   if ListView1.SelCount <> 1 then
   begin
-    Application.MessageBox('Select file in List', 'Confirm', 0);
+    Application.MessageBox('Select file in List', 'Confirm', MB_ICONWARNING);
     exit;
   end;
 
