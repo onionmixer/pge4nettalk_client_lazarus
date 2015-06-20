@@ -32,6 +32,7 @@ type
     procedure FormDragDrop(Sender, Source: TObject; X, Y: Integer);
     procedure FormDragOver(Sender, Source: TObject; X, Y: Integer;
       State: TDragState; var Accept: Boolean);
+    procedure FormDropFiles(Sender: TObject; const FileNames: array of String);
     procedure FormKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
     procedure FormShow(Sender: TObject);
     procedure MemoMessageKeyPress(Sender: TObject; var Key: char);
@@ -157,6 +158,17 @@ procedure TFormChat.FormDragOver(Sender, Source: TObject; X, Y: Integer;
   State: TDragState; var Accept: Boolean);
 begin
   Accept := (Source is TTreeView);
+end;
+
+procedure TFormChat.FormDropFiles(Sender: TObject;
+  const FileNames: array of String);
+var
+  FileName: String;
+begin
+  for FileName in FileNames do
+  begin
+    FormMain.AddUpload(fTargetID, FileName);
+  end;
 end;
 
 procedure TFormChat.FormKeyDown(Sender: TObject; var Key: Word;

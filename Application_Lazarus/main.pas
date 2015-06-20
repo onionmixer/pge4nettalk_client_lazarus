@@ -34,14 +34,16 @@ type
     fCubeConn: TNetworkInterface;
     fAuth: Boolean;
     fUser: String;
+    fUploadNow: Boolean;
     fChatForm: TObjectList;
     fChatUser: TStringList;
     fSendForm: TObjectList;
     fSendUser: TStringList;
     fRecvForm: TObjectList;
     fRecvUser: TStringList;
-    fFileList: TSparseStringArray;
+    fRequests: TSparseStringArray;
     fNickList: TStringDictionary;
+    fUploadList: TStringList;
     fFormSync: TCriticalSection;
 
     fLeftSkin, fRightSkin, fSelectSkin: TChatSkin;
@@ -54,6 +56,7 @@ type
     procedure UpdateUserInfo(User, Nick, Group, Status, Image: String);
     procedure ChatCloseAll;
     function GetConnected: Boolean;
+    procedure FileUpload;
   public
     { public declarations }
     procedure SignIn(User: String; Password: String);
@@ -62,6 +65,8 @@ type
     procedure ChatClose(User: String);
     function SendData(data: Pointer; size, toAddress: DWord):DWord;
     function GetNick(User: String): String;
+    procedure AddUpload(Target, FileName: String);
+    procedure FileShare(Target, FileSeq: String);
 
     property Connected: Boolean read GetConnected;
     property LeftSkin: TChatSkin read fLeftSkin;
@@ -122,6 +127,7 @@ var
 begin
   fFormSync := syncobjs.TCriticalSection.Create;
   fAuth := False;
+  fUploadNow := False;
   fCubeConn := TNetworkInterface.Create;
   fChatForm := TObjectList.Create(False);
   fChatUser := TStringList.Create;
@@ -129,8 +135,9 @@ begin
   fSendUser := TStringList.Create;
   fRecvForm := TObjectList.Create;
   fRecvUser := TStringList.Create;
-  fFileList := TSparseStringArray.Create;
+  fRequests := TSparseStringArray.Create;
   fNickList := TStringDictionary.Create;
+  fUploadList := TStringList.Create;
 
   MenuConnect.Caption := '&Connect...';
   MenuFileList.Enabled := False;
@@ -183,8 +190,9 @@ begin
   fRecvForm.Free;
   fRecvUser.Free;
 
-  fFileList.Free;
+  fRequests.Free;
   fNickList.Free;
+  fUploadList.Free;
 
   fFormSync.Free;
 end;
@@ -337,11 +345,10 @@ begin
     cargo.Seq := StrToInt(seq);
 
     data := cargo.getData(size);
-    uniqueID := fCubeConn.getUniqueID;
-    fCubeConn.send(data, size, uniqueID, $5454);
     cargo.Free;
 
-    fFileList[uniqueID] := room + '|' + user;
+    uniqueID := SendData(data, size, $5454);
+    fRequests[uniqueID] := room + '|' + user;
   end;
   if Assigned(tt) then
     FreeAndNil(tt);
@@ -435,6 +442,7 @@ begin
     ShortDateFormat := 'yy-mm-dd';
     LongTimeFormat := 'hh:nn';
     expire := DateTimeToStr(date);
+    mime := cargo.Mime;
 
     item := list.Items.FindCaption(0, filename, False, True, False);
     if item = nil then
@@ -444,31 +452,44 @@ begin
       item.SubItems.Add(sizestr);
       item.SubItems.Add(expire);
       item.SubItems.Add(seq);
+      item.SubItems.Add(mime);
     end
     else
     begin
       item.SubItems[0] := sizestr;
       item.SubItems[1] := expire;
       item.SubItems[2] := seq;
+      item.SubItems[3] := mime;
     end;
 
     list.AlphaSort;
     list.EndUpdate;
+
+    if fRequests.HasItem(Receiver.UniqueID) then
+    begin
+      user := fRequests[Receiver.UniqueID];
+      fRequests.Delete(Receiver.UniqueID);
+      FileShare(user, seq);
+    end;
+
+    fUploadNow := False;
+    FileUpload;
   end
   else if (cargo.Command = CargoCompanyTypeResult) And
     (cargo.ResultType = CargoCompanyTypeStat) then
   begin
-    if fFileList.HasItem(Receiver.UniqueID) then
+    if fRequests.HasItem(Receiver.UniqueID) then
     begin
-      str := fFileList[Receiver.UniqueID];
+      str := fRequests[Receiver.UniqueID];
+      fRequests.Delete(Receiver.UniqueID);
+
       cut := Pos('|', str);
       user := Copy(str, 1, cut - 1);
-      str := Copy(str, cut + 1, Length(str));
+      Delete(str, 1, cut);
       if user = fUser then
         user := str;
       ChatForm(user).RecvFile(str, cargo.Name, cargo.Mime,
         cargo.Seq, cargo.Size, cargo.Expire);
-      fFileList.Delete(Receiver.UniqueID);
     end;
   end
   else if cargo.Command = CargoCompanyTypeRemove then
@@ -490,7 +511,12 @@ begin
   end
   else if cargo.Command = CargoCompanyTypeShare then
   begin
-    user := FormFileList.GetSharedTarget(Receiver.UniqueID);
+    user := '';
+    if fRequests.HasItem(Receiver.UniqueID) then
+    begin
+      user := fRequests[Receiver.UniqueID];
+      fRequests.Delete(Receiver.UniqueID);
+    end;
     if user <> '' then
     begin
       tt := TTalkTo.Create;
@@ -532,12 +558,14 @@ begin
         item.SubItems.Add(sizestr);
         item.SubItems.Add(expire);
         item.SubItems.Add(seq);
+        item.SubItems.Add(mime);
       end
       else
       begin
         item.SubItems[0] := sizestr;
         item.SubItems[1] := expire;
         item.SubItems[2] := seq;
+        item.SubItems[3] := mime;
       end;
     end;
 
@@ -806,6 +834,50 @@ begin
     Result := User;
 end;
 
+procedure TFormMain.AddUpload(Target, FileName: String);
+begin
+  fFormSync.Enter;
+  fUploadList.Add(Target + '|' + FileName);
+  fFormSync.Leave;
+  if not fUploadNow then
+    FileUpload;
+end;
+
+procedure TFormMain.FileShare(Target, FileSeq: String);
+var
+  cargo: TCargoCompany;
+  data: Pointer;
+  size, uniqueID: DWord;
+  form: TFormChat;
+begin
+  if Target = '' then
+    exit;
+
+  cargo := TCargoCompany.Create;
+  cargo.Command := CargoCompanyTypeShare;
+  cargo.Seq := StrToInt(FileSeq);
+  if Target[1] = '#' then
+  begin
+    form := FormMain.ChatForm(Target, False);
+    if Assigned(form) then
+    begin
+      cargo.Args := TStringList.Create;
+      cargo.Args.AddStrings(form.Users);
+    end;
+  end
+  else
+  begin
+    cargo.Args := TStringList.Create;
+    cargo.Args.Add(Target);
+  end;
+
+  data := cargo.getData(size);
+  cargo.Free;
+
+  uniqueID := SendData(data, size, $5454);
+  fRequests[uniqueID] := Target;
+end;
+
 function TFormMain.SendData(data: Pointer; size, toAddress: DWord): DWord;
 begin
   Result := fCubeConn.getUniqueID;
@@ -815,6 +887,92 @@ end;
 function TFormMain.GetConnected: Boolean;
 begin
   Result := fCubeConn.Connected;
+end;
+
+procedure TFormMain.FileUpload;
+var
+  upload, user: String;
+  cut: Integer;
+  cargo: TCargoCompany;
+  fsIn: TFileStreamUTF8;
+  size, read: DWord;
+  data: Pointer;
+  uniqueID: DWord;
+begin
+  while True do
+  begin
+    upload := '';
+    fFormSync.Enter;
+    if not fUploadNow And (fUploadList.Count > 0) then
+    begin
+      upload := fUploadList[0];
+      fUploadList.Delete(0);
+      fUploadNow := True;
+    end;
+    fFormSync.Leave;
+    if upload = '' then
+      break;
+
+    cut := Pos('|', upload);
+    user := Copy(upload, 1, cut - 1);
+    Delete(upload, 1, cut);
+
+    if not FileExistsUTF8(upload) then
+    begin
+      Application.MessageBox('File not found', 'Confirm', MB_ICONERROR);
+      fUploadNow := False;
+      continue;
+    end;
+
+    data := nil;
+
+    try
+      fsIn := TFileStreamUTF8.Create(upload, fmOpenRead);
+      size := fsIn.Size;
+      data := GetMem(size);
+      if data = nil then
+      begin
+        FreeAndNil(fsIn);
+        Application.MessageBox('Not enough memory', 'Confirm', MB_ICONERROR);
+        fUploadNow := False;
+        continue;
+      end;
+      read := fsIn.Read(data^, size);
+      FreeAndNil(fsIn);
+    except
+      on E: Exception do
+      begin
+        Application.MessageBox(PChar(E.Message), 'File I/O Error', MB_ICONERROR);
+        if data <> nil then
+          FreeMem(data);
+        fUploadNow := False;
+        continue;
+      end;
+    end;
+
+    if size <> read then
+    begin
+      Application.MessageBox('Error on file reading', 'Confirm', MB_ICONERROR);
+      FreeMem(data);
+      fUploadNow := False;
+      continue;
+    end;
+
+    cargo := TCargoCompany.Create;
+    cargo.Command := CargoCompanyTypeUpload;
+    cargo.Name := ExtractFileName(upload);
+    cargo.ContentSize := size;
+    cargo.Content := data;
+
+    data := cargo.getData(size);
+    cargo.Free;
+
+    uniqueID :=  SendData(data, size, $5454);
+    if Length(User) > 0 then
+      fRequests[uniqueID] := user;
+
+    break;
+  end;
 end;
 
 end.

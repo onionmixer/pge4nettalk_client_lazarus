@@ -3,6 +3,7 @@ object FormChat: TFormChat
   Height = 325
   Top = 174
   Width = 419
+  AllowDropFiles = True
   Caption = 'FormChat'
   ClientHeight = 301
   ClientWidth = 419
@@ -12,6 +13,7 @@ object FormChat: TFormChat
   OnDestroy = FormDestroy
   OnDragDrop = FormDragDrop
   OnDragOver = FormDragOver
+  OnDropFiles = FormDropFiles
   OnKeyDown = FormKeyDown
   OnShow = FormShow
   Position = poDefaultPosOnly

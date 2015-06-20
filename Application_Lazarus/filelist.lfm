@@ -3,11 +3,11 @@ object FormFileList: TFormFileList
   Height = 240
   Top = 132
   Width = 327
+  AllowDropFiles = True
   Caption = 'File List'
   ClientHeight = 240
   ClientWidth = 327
-  OnCreate = FormCreate
-  OnDestroy = FormDestroy
+  OnDropFiles = FormDropFiles
   LCLVersion = '1.2.6.0'
   object ListView1: TListView
     Left = 8
@@ -29,6 +29,9 @@ object FormFileList: TFormFileList
       end    
       item
         Caption = 'Seq'
+      end    
+      item
+        Caption = 'Mime'
       end>
     TabOrder = 0
     ViewStyle = vsReport
