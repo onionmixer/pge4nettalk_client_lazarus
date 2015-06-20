@@ -6,6 +6,7 @@ object FormLogin: TFormLogin
   Caption = 'Login'
   ClientHeight = 83
   ClientWidth = 253
+  OnCreate = FormCreate
   OnShow = FormShow
   Position = poMainFormCenter
   LCLVersion = '1.2.6.0'

@@ -25,12 +25,13 @@ type
     TreeView1: TTreeView;
     procedure FormCreate(Sender: TObject);
     procedure FormDestroy(Sender: TObject);
-    procedure MenuExitClick(Sender: TObject);
     procedure MenuConnectClick(Sender: TObject);
     procedure MenuFileListClick(Sender: TObject);
+    procedure MenuExitClick(Sender: TObject);
     procedure TreeView1DblClick(Sender: TObject);
   private
     { private declarations }
+    fConfigFile: String;
     fCubeConn: TNetworkInterface;
     fAuth: Boolean;
     fUser: String;
@@ -68,6 +69,7 @@ type
     procedure AddUpload(Target, FileName: String);
     procedure FileShare(Target, FileSeq: String);
 
+    property ConfigFile: String read fConfigFile;
     property Connected: Boolean read GetConnected;
     property LeftSkin: TChatSkin read fLeftSkin;
     property RightSkin: TChatSkin read fRightSkin;
@@ -83,48 +85,38 @@ implementation
 {$R *.lfm}
 
 uses
-  login, filelist, DateUtils, LCLType, LazUTF8Classes,
+  login, filelist,
+  LCLType, IniFiles, DateUtils, LazUTF8Classes,
   OZFTalkTo, Session, CargoCompany;
 
 { TFormMain }
 
-procedure TFormMain.MenuExitClick(Sender: TObject);
+{$IFDEF WINDOWS}
+function GetAppName: String;
 begin
-  Application.Terminate;
+  Result := 'talkto';
 end;
-
-procedure TFormMain.MenuConnectClick(Sender: TObject);
-var
-  tt: TTalkTo;
-  size: DWord;
-  data: Pointer;
-begin
-  if fAuth then
-  begin
-    tt := TTalkTo.Create;
-    tt.functionID := TalkToFunctionIDQuit;
-
-    data := tt.getData(size);
-    tt.Free;
-    SendData(data, size, TalkToID);
-  end
-  else
-  begin
-    fCubeConn.Connect;
-    FormLogin.Show;
-  end;
-end;
-
-procedure TFormMain.MenuFileListClick(Sender: TObject);
-begin
-  FormFileList.Share := '';
-  FormFileList.Show;
-end;
+{$ENDIF}
 
 procedure TFormMain.FormCreate(Sender: TObject);
 var
   Skin: TBitmap;
 begin
+  {$IFDEF WINDOWS}
+  OldGetAppName := OnGetApplicationName;
+  OnGetApplicationName := @GetAppName;
+  try
+    fConfigFile := GetAppConfigDir(False);
+    if not DirectoryExistsUTF8(fConfigFile) then
+      MkDir(fConfigFile);
+    fConfigFile := fConfigFile + 'talkto.ini';
+  finally
+    OnGetApplicationName := OldGetAppName;
+  end;
+  {$ELSE}
+  fConfigFile := ExpandFileName('~/.talkto.conf');
+  {$ENDIF}
+
   fFormSync := syncobjs.TCriticalSection.Create;
   fAuth := False;
   fUploadNow := False;
@@ -197,6 +189,39 @@ begin
   fFormSync.Free;
 end;
 
+procedure TFormMain.MenuConnectClick(Sender: TObject);
+var
+  tt: TTalkTo;
+  size: DWord;
+  data: Pointer;
+begin
+  if fAuth then
+  begin
+    tt := TTalkTo.Create;
+    tt.functionID := TalkToFunctionIDQuit;
+
+    data := tt.getData(size);
+    tt.Free;
+    SendData(data, size, TalkToID);
+  end
+  else
+  begin
+    fCubeConn.Connect;
+    FormLogin.Show;
+  end;
+end;
+
+procedure TFormMain.MenuFileListClick(Sender: TObject);
+begin
+  FormFileList.Share := '';
+  FormFileList.Show;
+end;
+
+procedure TFormMain.MenuExitClick(Sender: TObject);
+begin
+  Application.Terminate;
+end;
+
 procedure TFormMain.TreeView1DblClick(Sender: TObject);
 var
   user: String;
@@ -249,6 +274,7 @@ var
   cargo: TCargoCompany;
   data: Pointer;
   size, uniqueID: DWord;
+  Config: TIniFile;
 begin
   tt := TTalkTo.Create(Receiver.Buffer, Receiver.Length);
   if tt.functionID = TalkToFunctionIDQuit then
@@ -276,6 +302,14 @@ begin
     MenuFileList.Enabled := True;
     FormLogin.Hide;
     FormFileList.ButtonRefreshClick(nil);
+
+    ShortDateFormat := 'yy-mm-dd';
+    LongTimeFormat := 'hh:nn:ss';
+
+    Config := TIniFile.Create(fConfigFile);
+    Config.WriteString('Login', 'Date', DateToStr(Now));
+    Config.WriteString('Login', 'Time', TimeToStr(Now));
+    Config.Free;
   end
   else if tt.functionID = TalkToFunctionIDStat then
   begin

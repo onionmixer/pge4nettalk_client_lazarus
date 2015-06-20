@@ -20,6 +20,7 @@ type
     procedure ButtonLoginClick(Sender: TObject);
     procedure EditIDKeyPress(Sender: TObject; var Key: char);
     procedure EditPassWordKeyPress(Sender: TObject; var Key: char);
+    procedure FormCreate(Sender: TObject);
     procedure FormShow(Sender: TObject);
   private
     { private declarations }
@@ -36,16 +37,21 @@ implementation
 
 {$R *.lfm}
 
-uses main, OZFTalkTo;
+uses main, IniFiles, OZFTalkTo;
 
 { TFormLogin }
 
 procedure TFormLogin.ButtonLoginClick(Sender: TObject);
+var
+  Config: TIniFile;
 begin
   if FormMain.Connected then
   begin
+    Config := TIniFile.Create(FormMain.ConfigFile);
+    Config.WriteString('Login', 'ID', EditID.Text);
+    Config.Free;
+
     FormMain.SignIn(EditID.Text, EditPassword.Text);
-    //FormMain.SendMsg('AUTH' + EditID.Text + '|' + EditPassWord.Text);
     ButtonLogin.Enabled := False;
   end
   else
@@ -70,9 +76,20 @@ begin
   end;
 end;
 
+procedure TFormLogin.FormCreate(Sender: TObject);
+var
+  Config: TIniFile;
+begin
+  Config := TIniFile.Create(FormMain.ConfigFile);
+  EditID.Text := Config.ReadString('Login', 'ID', '');
+  Config.Free;
+end;
+
 procedure TFormLogin.FormShow(Sender: TObject);
 begin
   ButtonLogin.Enabled := True;
+  if EditID.Text <> '' then
+    EditPassword.SetFocus;
 end;
 
 procedure TFormLogin.Fail;
