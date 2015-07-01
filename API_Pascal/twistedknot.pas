@@ -62,6 +62,7 @@ type
     fDecryptKey: Pointer;
 
     fReceivers: TFPObjectHashTable;
+    fReceiverQueue: TObjectList;
     fReadBuffer: array[0..TwistedKnotPacketLength - 1] of Byte;
     fReadPosition: Integer;
     fPacketLength: Integer;
@@ -97,6 +98,7 @@ type
     destructor Destroy; override;
 
     procedure Ping;
+    procedure RetryDelayed;
     procedure Send(Data: Pointer; Len: Integer; UniqueID, toAddress:DWord);
 
     procedure Connect;
@@ -156,6 +158,7 @@ type
     fBuffer: Pointer;
     fFrameFlags: Array of Byte;
     fFrameCount: Integer;
+    fReceiveTime: TDateTime;
     fSection: TCriticalSection;
 
     function getBuffer: Pointer;
@@ -173,6 +176,7 @@ type
     property Length: Integer read fLength;
     property Received: Integer read fReceived;
     property Buffer: Pointer read getBuffer;
+    property ReceiveTime: TDateTime read fReceiveTime;
   end;
 
   { TTwistedKnotPacket }
@@ -447,6 +451,7 @@ begin
     exit;
   end;
 
+  // FIXME: 6 -> 7
   AES_set_decrypt_key(@handshake[6], 128, fDecryptKey);
 end;
 
@@ -560,6 +565,10 @@ begin
           key := IntToStr(from) + ':' + IntToStr(streamID);
           fReceivers.Add(key, receiver);
 
+          fSection.Acquire;
+          fReceiverQueue.Add(receiver);
+          fSection.Release;
+
           sendControlPacket(Ord(PacketTypeContinue), from, streamID, 0, 0);
         end else begin
           sendControlPacket(Ord(PacketTypeReset), from, streamID, 0, 0);
@@ -574,10 +583,21 @@ begin
         key := IntToStr(from) + ':' + IntToStr(streamID);
         receiver := TTwistedKnotReceiver(fReceivers.Items[key]);
         if receiver = nil then continue;
+        if random(10) = 0 then
+        begin
+          WriteLn(IntToStr(streamID) + ', ' + IntToStr(frameNo) + ' Failed');
+          continue;
+        end;
 
         receiver.fillFrame(@decrypt[TwistedKnotHeaderLength], frameNo);
 
         sendControlPacket(Ord(PacketTypeReceived), from, streamID, frameNo, 0);
+
+        fSection.Acquire;
+        fReceiverQueue.Remove(receiver);
+        if receiver.Status <> TwistedKnotStreamComplete then
+          fReceiverQueue.Add(receiver);
+        fSection.Release;
 
         if receiver.Status = TwistedKnotStreamComplete then
         begin
@@ -1096,6 +1116,7 @@ begin
   fDecryptKey := GetMem(SizeOf(AES_KEY));
 
   fReceivers := TFPObjectHashTable.Create(False);
+  fReceiverQueue := TObjectList.create(False);
   fPacketLength := 16;
   fLastReceived := Now;
 
@@ -1169,6 +1190,31 @@ begin
     fpWrite(fWrite, dummy, 1);
     {$ENDIF}
   end;
+end;
+
+procedure TTwistedKnotConnection.RetryDelayed;
+var
+  limit: TDateTime;
+  receiver: TTwistedKnotReceiver;
+  i: Integer;
+begin
+  if fReceiverQueue.Count = 0 then
+    exit;
+
+  fSection.Acquire;
+  limit := IncSecond(Now, -5);
+  for i := 0 to fReceiverQueue.Count - 1 do
+  begin
+    receiver := TTwistedKnotReceiver(fReceiverQueue.Items[i]);
+    if receiver.ReceiveTime > limit then
+      break;
+    fSection.Release;
+    SendControlPacket(Ord(PacketTypeRetry), receiver.FromAddress,
+      receiver.StreamID, 0, 0);
+    WriteLn(IntToStr(receiver.StreamID) + ' retry');
+    fSection.Acquire;
+  end;
+  fSection.Release;
 end;
 
 procedure TTwistedKnotConnection.Send(Data: Pointer; Len: Integer;
@@ -1381,6 +1427,7 @@ begin
 
   fReceived := 0;
   fStatus := TwistedKnotStreamReady;
+  fReceiveTime := Now;
 
   if length = 0 then
   begin
@@ -1426,6 +1473,9 @@ begin
     Move(frame^, byteBuffer^, frameLength);
     fFrameFlags[frameNo] := 1;
     inc(fReceived, frameLength);
+
+    fReceiveTime := Now;
+    WriteLn(IntToStr(fStreamID) + ': ' + IntToStr(fReceived) + ' / ' + IntToStr(fLength));
 
     if fLength = fReceived then
       fStatus := TwistedKnotStreamComplete

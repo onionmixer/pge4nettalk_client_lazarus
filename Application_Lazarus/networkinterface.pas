@@ -78,27 +78,30 @@ type
 
 { TKeepAliveThread }
 
-procedure TKeepAliveThread.Execute;
-begin
-  while not Terminated do
-  begin
-    if Assigned(fConnection) then
-    begin
-      if SecondsBetween(Now, fConnection.LastReceived) > 60 then
-        fConnection.Connect
-      else
-        fConnection.Ping;
-    end;
-
-    Sleep(3000);
-  end;
-end;
-
 constructor TKeepAliveThread.Create;
 begin
   inherited Create(True);
   FreeOnTerminate := True;
   fConnection := nil;
+end;
+
+procedure TKeepAliveThread.Execute;
+begin
+  while not Terminated do
+  begin
+    if Assigned(fConnection) and fConnection.Connected then
+    begin
+      fConnection.Ping;
+      fConnection.RetryDelayed;
+
+      if SecondsBetween(Now, fConnection.LastReceived) > 60 then
+      begin
+        fConnection.Connect;
+      end;
+    end;
+
+    Sleep(3000);
+  end;
 end;
 
 { TNetworkInterface }

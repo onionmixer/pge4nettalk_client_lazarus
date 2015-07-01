@@ -209,7 +209,8 @@ begin
   end
   else
   begin
-    fCubeConn.Connect;
+    if not fCubeConn.Connected then
+      fCubeConn.Connect;
     FormLogin.Show;
   end;
 end;
@@ -231,7 +232,7 @@ var
 begin
   if TreeView1.Selected = nil then exit;
   User := IntToStr(PtrInt(TreeView1.Selected.Data));
-  if User = fUser then exit;
+  //if User = fUser then exit;
   ChatForm(User).Show;
 end;
 
@@ -289,6 +290,7 @@ begin
       MenuConnect.Caption := '&Connect...';
       MenuFileList.Enabled := False;
       TreeView1.Items.Clear;
+      fNickList.Clear;
       ChatCloseAll;
     end
     else
