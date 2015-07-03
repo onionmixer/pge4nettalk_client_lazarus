@@ -484,7 +484,7 @@ begin
     cargo.Free;
 
     uniqueID := SendData(data, size, $5454);
-    fRequests[uniqueID] := room + '|' + user;
+    fRequests[uniqueID] := 'FI' + room + '|' + user;
   end;
   if Assigned(tt) then
     FreeAndNil(tt);
@@ -623,13 +623,17 @@ begin
       str := fRequests[Receiver.UniqueID];
       fRequests.Delete(Receiver.UniqueID);
 
-      cut := Pos('|', str);
-      user := Copy(str, 1, cut - 1);
-      Delete(str, 1, cut);
-      if user = fUser then
-        user := str;
-      ChatForm(user).RecvFile(str, cargo.Name, cargo.Mime,
-        cargo.Seq, cargo.Size, cargo.Expire);
+      if Copy(str, 1, 2) = 'FI' then
+      begin
+        Delete(str, 1, 2);
+        cut := Pos('|', str);
+        user := Copy(str, 1, cut - 1);
+        Delete(str, 1, cut);
+        if user = fUser then
+          user := str;
+        ChatForm(user).RecvFile(str, cargo.Name, cargo.Mime,
+          cargo.Seq, cargo.Size, cargo.Expire);
+      end;
     end;
   end
   else if cargo.Command = CargoCompanyTypeRemove then
@@ -656,7 +660,7 @@ begin
     begin
       user := fRequests[Receiver.UniqueID];
       fRequests.Delete(Receiver.UniqueID);
-      if (user <> 'UP') and (Copy(user, 1, 2) = 'UP') then
+      if Copy(user, 1, 2) = 'SH' then
         Delete(user, 1, 2)
       else
         user := '';
@@ -1017,7 +1021,7 @@ begin
   cargo.Free;
 
   uniqueID := SendData(data, size, $5454);
-  fRequests[uniqueID] := Target;
+  fRequests[uniqueID] := 'SH' + Target;
 end;
 
 function TFormMain.SendData(data: Pointer; size, toAddress: DWord): DWord;
