@@ -8,8 +8,12 @@ uses
   Classes, SysUtils, syncobjs, Contnrs, TwistedKnot, LCLIntf, LMessages;
 
 const
-  NI_RECEIVE = LM_USER + 101;
-  NI_STATUS = NI_RECEIVE + 1;
+  NI_EVENT = LM_USER + 101;
+  NI_STATUS = NI_EVENT + 1;
+  NetworkInterfaceSendStart = 1;
+  NetworkInterfaceSendComplete = 2;
+  NetworkInterfaceReceiveStart = 3;
+  NetworkInterfaceReceiveComplete = 4;
 
 type
 
@@ -21,7 +25,8 @@ type
     fKeepAlive: TThread;
     fLastUniqueID: DWord;
     fSection: TCriticalSection;
-    fReceivers: TObjectList;
+    fItems: TObjectList;
+    fStatus: TStringList;
 
     function getConnected: Boolean;
 
@@ -33,7 +38,7 @@ type
     procedure Reconnect;
     procedure Close;
     procedure send(Data: Pointer; Len: Integer; UniqueID, toAddress:DWord);
-    function getReceiver: TTwistedKnotReceiver;
+    function getItem(var Status: Integer): TObject;
 
     function getUniqueID:DWord;
 
@@ -115,7 +120,8 @@ constructor TNetworkInterface.Create;
 begin
   fLastUniqueID := 0;
   fSection := syncobjs.TCriticalSection.Create;
-  fReceivers := TObjectList.Create(False);
+  fItems := TObjectList.Create(False);
+  fStatus := TStringList.Create;
 
   fConnection := TTwistedKnotConnection.Create;
   fConnection.PublicKey := PublicKey;
@@ -140,7 +146,8 @@ begin
   fConnection := nil;
 
   fSection.Free;
-  fReceivers.Free;
+  fItems.Free;
+  fStatus.Free;
 end;
 
 procedure TNetworkInterface.Connect;
@@ -171,15 +178,18 @@ begin
   fConnection.Send(Data, Len, UniqueID, toAddress);
 end;
 
-function TNetworkInterface.getReceiver: TTwistedKnotReceiver;
+function TNetworkInterface.getItem(var Status: Integer): TObject;
 begin
   Result := nil;
+  Status := 0;
 
   fSection.Acquire;
-  if fReceivers.Count > 0 then
+  if fItems.Count > 0 then
   begin
-    Result := TTwistedKnotReceiver(fReceivers.Items[0]);
-    fReceivers.Delete(0);
+    Result := fItems.Items[0];
+    Status := StrToInt(fStatus[0]);
+    fItems.Delete(0);
+    fStatus.Delete(0);
   end;
   fSection.Release;
 end;
@@ -199,12 +209,20 @@ end;
 
 procedure TNetworkInterface.sendStart(Sender: TTwistedKnotSender);
 begin
-
+  fSection.Acquire;
+  fItems.Add(Sender);
+  fStatus.Add(IntToStr(NetworkInterfaceSendStart));
+  fSection.Release;
+  PostMessage(FormMain.Handle, NI_EVENT, 0, 0);
 end;
 
 procedure TNetworkInterface.sendCompleted(Sender: TTwistedKnotSender);
 begin
-  Sender.Free;
+  fSection.Acquire;
+  fItems.Add(Sender);
+  fStatus.Add(IntToStr(NetworkInterfaceSendComplete));
+  fSection.Release;
+  PostMessage(FormMain.Handle, NI_EVENT, 0, 0);
 end;
 
 function TNetworkInterface.canReceive(UniqueID, From, Length: Cardinal
@@ -215,15 +233,20 @@ end;
 
 procedure TNetworkInterface.receiveStart(Receiver: TTwistedKnotReceiver);
 begin
-
+  fSection.Acquire;
+  fItems.Add(Receiver);
+  fStatus.Add(IntToStr(NetworkInterfaceReceiveStart));
+  fSection.Release;
+  PostMessage(FormMain.Handle, NI_EVENT, 0, 0);
 end;
 
 procedure TNetworkInterface.receiveCompleted(Receiver: TTwistedKnotReceiver);
 begin
   fSection.Acquire;
-  fReceivers.Add(Receiver);
+  fItems.Add(Receiver);
+  fStatus.Add(IntToStr(NetworkInterfaceReceiveComplete));
   fSection.Release;
-  PostMessage(FormMain.Handle, NI_RECEIVE, 0, 0);
+  PostMessage(FormMain.Handle, NI_EVENT, 0, 0);
 end;
 
 end.

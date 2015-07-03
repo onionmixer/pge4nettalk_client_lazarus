@@ -47,7 +47,7 @@ type
     fFromID: String;
     fTargetID: String;
     fUsers: TStringList;
-    fJumpSeq: TStrings;
+    fJumpSeq: TStringList;
   public
     { public declarations }
     procedure SetUser(from, target: String);

@@ -583,11 +583,6 @@ begin
         key := IntToStr(from) + ':' + IntToStr(streamID);
         receiver := TTwistedKnotReceiver(fReceivers.Items[key]);
         if receiver = nil then continue;
-        if random(10) = 0 then
-        begin
-          WriteLn(IntToStr(streamID) + ', ' + IntToStr(frameNo) + ' Failed');
-          continue;
-        end;
 
         receiver.fillFrame(@decrypt[TwistedKnotHeaderLength], frameNo);
 
@@ -1211,7 +1206,6 @@ begin
     fSection.Release;
     SendControlPacket(Ord(PacketTypeRetry), receiver.FromAddress,
       receiver.StreamID, 0, 0);
-    WriteLn(IntToStr(receiver.StreamID) + ' retry');
     fSection.Acquire;
   end;
   fSection.Release;
@@ -1475,7 +1469,6 @@ begin
     inc(fReceived, frameLength);
 
     fReceiveTime := Now;
-    WriteLn(IntToStr(fStreamID) + ': ' + IntToStr(fReceived) + ' / ' + IntToStr(fLength));
 
     if fLength = fReceived then
       fStatus := TwistedKnotStreamComplete

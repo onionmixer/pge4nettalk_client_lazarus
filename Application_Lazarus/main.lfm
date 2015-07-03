@@ -501,4 +501,9 @@ object FormMain: TFormMain
     left = 200
     top = 40
   end
+  object Timer1: TTimer
+    OnTimer = Timer1Timer
+    left = 40
+    top = 112
+  end
 end

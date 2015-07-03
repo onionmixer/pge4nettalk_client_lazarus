@@ -22,17 +22,20 @@ type
     MenuFileList: TMenuItem;
     SaveDialog1: TSaveDialog;
     StatusBar1: TStatusBar;
+    Timer1: TTimer;
     TreeView1: TTreeView;
     procedure FormCreate(Sender: TObject);
     procedure FormDestroy(Sender: TObject);
     procedure MenuConnectClick(Sender: TObject);
     procedure MenuFileListClick(Sender: TObject);
     procedure MenuExitClick(Sender: TObject);
+    procedure Timer1Timer(Sender: TObject);
     procedure TreeView1DblClick(Sender: TObject);
   private
     { private declarations }
     fConfigFile: String;
-    fCubeConn: TNetworkInterface;
+    fNetwork: TNetworkInterface;
+    fNetworkStatus: TTwistedKnotStatus;
     fAuth: Boolean;
     fUser: String;
     fUploadNow: Boolean;
@@ -45,11 +48,12 @@ type
     fRequests: TSparseStringArray;
     fNickList: TStringDictionary;
     fUploadList: TStringList;
+    fSenderList: TObjectList;
     fFormSync: TCriticalSection;
 
     fLeftSkin, fRightSkin, fSelectSkin: TChatSkin;
 
-    procedure OnReceive(var Msg: TLMessage); message NI_RECEIVE;
+    procedure OnNetworkEvent(var Msg: TLMessage); message NI_EVENT;
     procedure OnStatus(var Msg: TLMessage); message NI_STATUS;
     procedure OnTalkTo(Receiver: TTwistedKnotReceiver);
     procedure OnSession(Receiver: TTwistedKnotReceiver);
@@ -120,10 +124,12 @@ begin
   fConfigFile := ExpandFileName('~/.talkto.conf');
   {$ENDIF}
 
+  fNetworkStatus := TwistedKnotStatusDisconnect;
+
   fFormSync := syncobjs.TCriticalSection.Create;
   fAuth := False;
   fUploadNow := False;
-  fCubeConn := TNetworkInterface.Create;
+  fNetwork := TNetworkInterface.Create;
   fChatForm := TObjectList.Create(False);
   fChatUser := TStringList.Create;
   fSendForm := TObjectList.Create;
@@ -133,6 +139,7 @@ begin
   fRequests := TSparseStringArray.Create;
   fNickList := TStringDictionary.Create;
   fUploadList := TStringList.Create;
+  fSenderList := TObjectList.create(False);
 
   MenuConnect.Caption := '&Connect...';
   MenuFileList.Enabled := False;
@@ -169,7 +176,7 @@ begin
   tt.Free;
   SendData(data, size, TalkToID);
 
-  fCubeConn.Free;
+  fNetwork.Free;
 
   for i := fChatForm.Count - 1 downto 0 do
   begin
@@ -188,6 +195,7 @@ begin
   fRequests.Free;
   fNickList.Free;
   fUploadList.Free;
+  fSenderList.Free;
 
   fFormSync.Free;
 end;
@@ -209,8 +217,8 @@ begin
   end
   else
   begin
-    if not fCubeConn.Connected then
-      fCubeConn.Connect;
+    if not fNetwork.Connected then
+      fNetwork.Connect;
     FormLogin.Show;
   end;
 end;
@@ -226,24 +234,113 @@ begin
   Application.Terminate;
 end;
 
+procedure TFormMain.Timer1Timer(Sender: TObject);
+const
+  units: array[0..4] of String = ('B', 'KB', 'MB', 'GB', 'TB');
+var
+  item: TTwistedKnotSender;
+  sent, total: Double;
+  result: String;
+  i: Integer;
+begin
+  if fSenderList.Count = 0 then
+  begin
+    if fNetworkStatus = TwistedKnotStatusDisconnect then
+      StatusBar1.Panels[0].Text := 'Disconnected'
+    else
+      StatusBar1.Panels[0].Text := 'Connected';
+    exit;
+  end;
+
+  sent := 0;
+  total := 0;
+
+  fFormSync.Acquire;
+  for i := 0 to fSenderList.Count - 1 do
+  begin
+    item := fSenderList.Items[i] as TTwistedKnotSender;
+    sent := sent + item.Sent;
+    total := total + item.Length;
+  end;
+  fFormSync.Release;
+
+  for i := 0 to 4 do
+  begin
+    if sent < 1024 then
+      break;
+    sent := sent / 1024;
+  end;
+
+  result := Format('%.2f', [sent]) + ' ' + units[i];
+
+  for i := 0 to 4 do
+  begin
+    if total < 1024 then
+      break;
+    total := total / 1024;
+  end;
+
+  result := result + ' / ' + Format('%.2f', [total]) + ' ' + units[i];
+
+  if fNetworkStatus = TwistedKnotStatusDisconnect then
+    StatusBar1.Panels[0].Text := 'Disconnected, Upload: ' + result
+  else
+    StatusBar1.Panels[0].Text := 'Connected, Upload: ' + result;
+end;
+
 procedure TFormMain.TreeView1DblClick(Sender: TObject);
 var
   user: String;
 begin
   if TreeView1.Selected = nil then exit;
   User := IntToStr(PtrInt(TreeView1.Selected.Data));
-  //if User = fUser then exit;
+  if User = fUser then exit;
   ChatForm(User).Show;
 end;
 
-procedure TFormMain.OnReceive(var Msg: TLMessage);
+procedure TFormMain.OnNetworkEvent(var Msg: TLMessage);
 var
+  Item: TObject;
+  Status: Integer;
+  Sender: TTwistedKnotSender;
   Receiver: TTwistedKnotReceiver;
   service: Word;
+  request: String;
 begin
   while true do
   begin
-    Receiver := fCubeConn.getReceiver;
+    Item := fNetwork.getItem(Status);
+    if Item = nil then
+      break;
+
+    if Item is TTwistedKnotSender then
+    begin
+      Sender := Item as TTwistedKnotSender;
+
+      request := '';
+      if fRequests.HasItem(Sender.UniqueID) then
+        request := fRequests[Sender.UniqueID];
+
+      if Copy(request, 1, 2) = 'UP' then
+      begin
+        fFormSync.Acquire;
+        if Status = NetworkInterfaceSendStart then
+          fSenderList.Add(Sender)
+        else
+          fSenderList.Remove(Sender);
+        fFormSync.Release;
+      end;
+
+      if Status = NetworkInterfaceSendComplete then
+        Sender.Free;
+
+      continue;
+    end;
+
+    if Status <> NetworkInterfaceReceiveComplete then
+      continue;
+
+    Receiver := Item as TTwistedKnotReceiver;
 
     if Receiver = nil then
       break;
@@ -508,7 +605,11 @@ begin
     begin
       user := fRequests[Receiver.UniqueID];
       fRequests.Delete(Receiver.UniqueID);
-      FileShare(user, seq);
+      if (user <> 'UP') and (Copy(user, 1, 2) = 'UP') then
+      begin
+        Delete(user, 1, 2);
+        FileShare(user, seq);
+      end;
     end;
 
     fUploadNow := False;
@@ -555,6 +656,10 @@ begin
     begin
       user := fRequests[Receiver.UniqueID];
       fRequests.Delete(Receiver.UniqueID);
+      if (user <> 'UP') and (Copy(user, 1, 2) = 'UP') then
+        Delete(user, 1, 2)
+      else
+        user := '';
     end;
     if user <> '' then
     begin
@@ -623,17 +728,15 @@ begin
 end;
 
 procedure TFormMain.OnStatus(var Msg: TLMessage);
-var
-  status: TTwistedKnotStatus;
 begin
-  status := TTwistedKnotStatus(Msg.WParam);
+  fNetworkStatus := TTwistedKnotStatus(Msg.WParam);
 
-  if status = TwistedKnotStatusDisconnect then
+  if fNetworkStatus = TwistedKnotStatusDisconnect then
     StatusBar1.Panels[0].Text := 'Disconnected'
   else
     StatusBar1.Panels[0].Text := 'Connected';
 
-  if status = TwistedKnotStatusConnect then
+  if fNetworkStatus = TwistedKnotStatusConnect then
   begin
     if fAuth then
        FormLogin.Retry;
@@ -696,7 +799,7 @@ begin
   request.args.Add('user');
 
   data := request.getData(size);
-  fCubeConn.send(data, size, fCubeConn.getUniqueID, SessionID);
+  fNetwork.send(data, size, fNetwork.getUniqueID, SessionID);
 
   request.Free;
 end;
@@ -919,13 +1022,13 @@ end;
 
 function TFormMain.SendData(data: Pointer; size, toAddress: DWord): DWord;
 begin
-  Result := fCubeConn.getUniqueID;
-  fCubeConn.send(data, size, Result, toAddress);
+  Result := fNetwork.getUniqueID;
+  fNetwork.send(data, size, Result, toAddress);
 end;
 
 function TFormMain.GetConnected: Boolean;
 begin
-  Result := fCubeConn.Connected;
+  Result := fNetwork.Connected;
 end;
 
 procedure TFormMain.FileUpload;
@@ -1014,7 +1117,9 @@ begin
 
     uniqueID :=  SendData(data, size, $5454);
     if Length(User) > 0 then
-      fRequests[uniqueID] := user;
+      fRequests[uniqueID] := 'UP' + user
+    else
+      fRequests[uniqueID] := 'UP';
 
     break;
   end;
