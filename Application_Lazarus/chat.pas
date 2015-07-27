@@ -241,7 +241,7 @@ begin
   cargo.Seq := StrToInt(fJumpSeq[id]);
 
   data := cargo.getData(size);
-  FormMain.SendData(data, size, $5454);
+  FormMain.SendData(data, size, CargoCompanyID);
   cargo.Free;
 end;
 

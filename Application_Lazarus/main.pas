@@ -483,7 +483,7 @@ begin
     data := cargo.getData(size);
     cargo.Free;
 
-    uniqueID := SendData(data, size, $5454);
+    uniqueID := SendData(data, size, CargoCompanyID);
     fRequests[uniqueID] := 'FI' + room + '|' + user;
   end;
   if Assigned(tt) then
@@ -1020,7 +1020,7 @@ begin
   data := cargo.getData(size);
   cargo.Free;
 
-  uniqueID := SendData(data, size, $5454);
+  uniqueID := SendData(data, size, CargoCompanyID);
   fRequests[uniqueID] := 'SH' + Target;
 end;
 
@@ -1119,7 +1119,7 @@ begin
     data := cargo.getData(size);
     cargo.Free;
 
-    uniqueID :=  SendData(data, size, $5454);
+    uniqueID :=  SendData(data, size, CargoCompanyID);
     if Length(User) > 0 then
       fRequests[uniqueID] := 'UP' + user
     else

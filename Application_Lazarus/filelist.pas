@@ -53,7 +53,7 @@ begin
   cargo := TCargoCompany.Create;
   cargo.Command := CargoCompanyTypeList;
   data := cargo.getData(size);
-  FormMain.SendData(data, size, $5454);
+  FormMain.SendData(data, size, CargoCompanyID);
   cargo.Free;
 end;
 
@@ -110,7 +110,7 @@ begin
   cargo.Seq := StrToInt(ListView1.Selected.SubItems[2]);
 
   data := cargo.getData(size);
-  FormMain.SendData(data, size, $5454);
+  FormMain.SendData(data, size, CargoCompanyID);
   cargo.Free;
 end;
 

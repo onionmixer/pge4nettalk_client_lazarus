@@ -4,7 +4,7 @@ object FormMain: TFormMain
   Top = 129
   Width = 269
   Caption = 'Talk To'
-  ClientHeight = 398
+  ClientHeight = 400
   ClientWidth = 269
   Menu = MainMenu1
   OnCreate = FormCreate
@@ -12,11 +12,11 @@ object FormMain: TFormMain
   LCLVersion = '1.2.6.0'
   object TreeView1: TTreeView
     Left = 0
-    Height = 377
+    Height = 382
     Top = 0
     Width = 269
     Align = alClient
-    DefaultItemHeight = 18
+    DefaultItemHeight = 16
     DragMode = dmAutomatic
     ReadOnly = True
     ScrollBars = ssAutoBoth
@@ -26,8 +26,8 @@ object FormMain: TFormMain
   end
   object StatusBar1: TStatusBar
     Left = 0
-    Height = 21
-    Top = 377
+    Height = 18
+    Top = 382
     Width = 269
     Panels = <    
       item
