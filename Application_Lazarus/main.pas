@@ -46,6 +46,9 @@ type
     fRecvForm: TObjectList;
     fRecvUser: TStringList;
     fRequests: TSparseStringArray;
+    fFileNames: TSparseStringArray;
+    fFileSizes: TSparseInt64Array;
+    fUploadPos, fUploadSize: TSparseInt64Array;
     fNickList: TStringDictionary;
     fUploadList: TStringList;
     fSenderList: TObjectList;
@@ -69,6 +72,7 @@ type
     function ChatForm(User: String; Add: Boolean = True): TFormChat;
     procedure ChatClose(User: String);
     function SendData(data: Pointer; size, toAddress: DWord):DWord;
+    procedure SendData(data: Pointer; size, uniqueID, toAddress: DWord);
     function GetNick(User: String): String;
     procedure AddUpload(Target, FileName: String);
     procedure FileShare(Target, FileSeq: String);
@@ -90,7 +94,7 @@ implementation
 
 uses
   login, filelist,
-  LCLType, IniFiles, DateUtils, LazUTF8Classes,
+  LCLType, IniFiles, DateUtils, LazUTF8Classes, cHash,
   OZFTalkTo, Session, CargoCompany;
 
 { TFormMain }
@@ -137,6 +141,10 @@ begin
   fRecvForm := TObjectList.Create;
   fRecvUser := TStringList.Create;
   fRequests := TSparseStringArray.Create;
+  fFileNames := TSparseStringArray.Create;
+  fFileSizes := TSparseInt64Array.Create;
+  fUploadPos := TSparseInt64Array.Create;
+  fUploadSize := TSparseInt64Array.Create;
   fNickList := TStringDictionary.Create;
   fUploadList := TStringList.Create;
   fSenderList := TObjectList.create(False);
@@ -259,8 +267,15 @@ begin
   for i := 0 to fSenderList.Count - 1 do
   begin
     item := fSenderList.Items[i] as TTwistedKnotSender;
+
     sent := sent + item.Sent;
-    total := total + item.Length;
+    if fUploadPos.HasItem(item.UniqueID) then
+      sent := sent + fUploadPos[item.UniqueID];
+
+    if fUploadSize.HasItem(item.UniqueID) then
+      total := total + fUploadSize[item.UniqueID]
+    else
+      total := total + item.Length;
   end;
   fFormSync.Release;
 
@@ -294,7 +309,7 @@ var
 begin
   if TreeView1.Selected = nil then exit;
   User := IntToStr(PtrInt(TreeView1.Selected.Data));
-  if User = fUser then exit;
+  //if User = fUser then exit;
   ChatForm(User).Show;
 end;
 
@@ -520,12 +535,13 @@ end;
 procedure TFormMain.OnCargoCompany(Receiver: TTwistedKnotReceiver);
 var
   tt: TTalkTo;
-  cargo: TCargoCompany;
+  cargo, response: TCargoCompany;
+  fsIn: TFileStreamUTF8;
   fsOut: TFileStreamUTF8;
   list: TListView;
   item: TListItem;
   i, cut: Integer;
-  size: DWord;
+  read, size, nextpos: DWord;
   data: Pointer;
   str, seq, filename, sizestr, mime, expire, user: String;
   date: TDateTime;
@@ -543,15 +559,94 @@ begin
   end
   else if cargo.Command = CargoCompanyTypeUpload then
   begin
-    SaveDialog1.FileName := cargo.Name;
-    cont := SaveDialog1.Execute;
-    if cont And FileExistsUTF8(SaveDialog1.FileName) then
-      cont := Application.MessageBox('Overwrite exists file?', 'Overwrite', MB_YESNO) = IDYES;
-    if cont then
+    if fRequests.HasItem(Receiver.UniqueID) then
     begin
+      str := fRequests[Receiver.UniqueID];
+      cut := Pos('|', str);
+      filename := Copy(str, 3, cut - 3);
+
+      data := nil;
+
       try
-        fsOut := TFileStreamUTF8.Create(SaveDialog1.FileName, fmCreate);
+        fsIn := TFileStreamUTF8.Create(filename, fmOpenRead);
+        fsIn.Seek(cargo.Position, soBeginning);
+        size := fsIn.Size - cargo.position;
+        if size > 1024*1024 then
+          size := 1024*1024;
+        data := GetMem(size);
+        read := 0;
+        if data <> nil then
+        begin
+          read := fsIn.Read(data^, size);
+          FreeAndNil(fsIn);
+        end
+        else
+        begin
+          FreeAndNil(fsIn);
+          Application.MessageBox('Not enough memory', 'Confirm', MB_ICONERROR);
+        end;
+      except
+        on E: Exception do
+        begin
+          Application.MessageBox(PChar(E.Message), 'File I/O Error', MB_ICONERROR);
+          if data <> nil then
+            FreeMem(data);
+          data := nil;
+        end;
+      end;
+
+      if size <> read then
+      begin
+        Application.MessageBox('Error on file reading', 'Confirm', MB_ICONERROR);
+        FreeMem(data);
+        data := nil;
+      end;
+
+      if data <> nil then
+      begin
+        response := TCargoCompany.Create;
+        response.Command := CargoCompanyTypeTransfer;
+        response.Seq := cargo.Seq;
+        response.Position := cargo.Position;
+        response.Content := data;
+        response.ContentSize := size;
+
+        data := response.getData(size);
+        response.Free;
+
+        SendData(data, size, Receiver.UniqueID, CargoCompanyID);
+      end;
+    end;
+  end
+  else if cargo.Command = CargoCompanyTypeTransfer then
+  begin
+    if not fRequests.HasItem(Receiver.UniqueID) then
+    begin
+      cont := False;
+      if fFileNames.HasItem(cargo.Seq) then
+      begin
+        SaveDialog1.FileName := fFileNames[cargo.Seq];
+        cont := SaveDialog1.Execute;
+      end;
+      if cont And FileExistsUTF8(SaveDialog1.FileName) then
+        cont := Application.MessageBox('Overwrite exists file?', 'Overwrite', MB_YESNO) = IDYES;
+      if cont then
+        fRequests[Receiver.UniqueID] := 'DN' + SaveDialog1.FileName;
+    end;
+    if fRequests.HasItem(Receiver.UniqueID) then
+    begin
+      str := fRequests[Receiver.UniqueID];
+      filename := Copy(str, 3, Length(str));
+
+      try
+        if FileExistsUTF8(filename) then
+          fsOut := TFileStreamUTF8.Create(filename, fmOpenRead)
+        else
+          fsOut := TFileStreamUTF8.Create(filename, fmCreate);
+
+        fsOut.Seek(cargo.Position, soBeginning);
         size := fsOut.Write(cargo.Content^, cargo.ContentSize);
+        nextpos := fsOut.Position;
         fsOut.Free;
 
         if cargo.ContentSize <> size then
@@ -561,6 +656,19 @@ begin
       except
         on E: Exception do
           Application.MessageBox(PChar(E.Message), 'File I/O Error', MB_ICONERROR);
+      end;
+
+      if fFileSizes[cargo.Seq] > nextpos then
+      begin
+        response := TCargoCompany.Create;
+        response.Command := CargoCompanyTypeDownload;
+        response.Seq := cargo.Seq;
+        response.Position := nextpos;
+
+        data := response.getData(size);
+        response.Free;
+
+        SendData(data, size, Receiver.UniqueID, CargoCompanyID);
       end;
     end;
   end
@@ -605,10 +713,12 @@ begin
     begin
       user := fRequests[Receiver.UniqueID];
       fRequests.Delete(Receiver.UniqueID);
-      if (user <> 'UP') and (Copy(user, 1, 2) = 'UP') then
+      if (Copy(user, 1, 2) = 'UP') then
       begin
-        Delete(user, 1, 2);
-        FileShare(user, seq);
+        cut := Pos('|', user);
+        Delete(user, 1, cut);
+        if Length(user) > 0 then
+          FileShare(user, seq);
       end;
     end;
 
@@ -633,6 +743,8 @@ begin
           user := str;
         ChatForm(user).RecvFile(str, cargo.Name, cargo.Mime,
           cargo.Seq, cargo.Size, cargo.Expire);
+        fFileNames[cargo.Seq] := cargo.Name;
+        fFileSizes[cargo.Seq] := cargo.Size;
       end;
     end;
   end
@@ -1030,6 +1142,11 @@ begin
   fNetwork.send(data, size, Result, toAddress);
 end;
 
+procedure TFormMain.SendData(data: Pointer; size, uniqueID, toAddress: DWord);
+begin
+  fNetwork.send(data, size, uniqueID, toAddress);
+end;
+
 function TFormMain.GetConnected: Boolean;
 begin
   Result := fNetwork.Connected;
@@ -1044,6 +1161,8 @@ var
   size, read: DWord;
   data: Pointer;
   uniqueID: DWord;
+  md5: T128BitDigest;
+  sha256: T256BitDigest;
 begin
   while True do
   begin
@@ -1110,20 +1229,24 @@ begin
       continue;
     end;
 
+    md5 := CalcMD5(data^, size);
+    sha256 := CalcSHA256(data^, size);
+    FreeMem(data);
+
     cargo := TCargoCompany.Create;
-    cargo.Command := CargoCompanyTypeUpload;
+    cargo.Command := CargoCompanyTypeUploadRequest;
     cargo.Name := ExtractFileName(upload);
-    cargo.ContentSize := size;
-    cargo.Content := data;
+    cargo.Size := size;
+    cargo.MD5 := DigestToHexA(md5, sizeof(md5));
+    cargo.SHA256 := DigestToHexA(sha256, sizeof(sha256));
 
     data := cargo.getData(size);
     cargo.Free;
 
     uniqueID :=  SendData(data, size, CargoCompanyID);
-    if Length(User) > 0 then
-      fRequests[uniqueID] := 'UP' + user
-    else
-      fRequests[uniqueID] := 'UP';
+    fRequests[uniqueID] := 'UP' + upload + '|' + user;
+    fUploadPos[uniqueID] := 0;
+    fUploadSize[uniqueID] := read;
 
     break;
   end;

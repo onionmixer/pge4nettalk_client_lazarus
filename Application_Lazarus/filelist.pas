@@ -6,7 +6,7 @@ interface
 
 uses
   Classes, SysUtils, FileUtil, Forms, Controls, Graphics, Dialogs, ComCtrls,
-  StdCtrls, cDataStructs;
+  StdCtrls;
 
 type
 
@@ -40,7 +40,7 @@ implementation
 
 {$R *.lfm}
 
-uses main, chat, LCLType, LazUTF8Classes, TwistedKnot, CargoCompany;
+uses main, chat, LCLType, TwistedKnot, CargoCompany;
 
 { TFormFileList }
 
@@ -97,7 +97,7 @@ procedure TFormFileList.ButtonDeleteClick(Sender: TObject);
 var
   cargo: TCargoCompany;
   data: Pointer;
-  size, uniqueID: DWord;
+  size: DWord;
 begin
   if ListView1.SelCount <> 1 then
   begin

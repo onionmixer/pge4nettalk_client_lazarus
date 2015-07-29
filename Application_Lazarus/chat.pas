@@ -64,7 +64,9 @@ implementation
 
 {$R *.lfm}
 
-uses main, invite, filelist, LazUTF8Classes, ChatLabel, CargoCompany, LCLType, DateUtils;
+uses
+  main, invite, filelist,
+  LazUTF8Classes, ChatLabel, CargoCompany, LCLType, DateUtils;
 
 { TFormChat }
 
