@@ -309,7 +309,7 @@ var
 begin
   if TreeView1.Selected = nil then exit;
   User := IntToStr(PtrInt(TreeView1.Selected.Data));
-  //if User = fUser then exit;
+  if User = fUser then exit;
   ChatForm(User).Show;
 end;
 
@@ -615,6 +615,7 @@ begin
         response.Free;
 
         SendData(data, size, Receiver.UniqueID, CargoCompanyID);
+        fUploadPos[Receiver.UniqueID] := cargo.Position;
       end;
     end;
   end
