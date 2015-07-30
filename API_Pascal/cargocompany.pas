@@ -64,8 +64,8 @@ type
     property Seq: DWord read fSeq write fSeq;
     property Name: UTF8String read fName write fName;
     property Size: DWord read fSize write fSize;
-    property Mime: UTF8String read fMime write fMime;
-    property Expire: DWord read fExpire write fExpire;
+    property Mime: UTF8String read fMime;
+    property Expire: DWord read fExpire;
     property MD5: UTF8String read fMD5 write fMD5;
     property SHA256: UTF8String read fSHA256 write fSHA256;
     property Position: DWord read fPosition write fPosition;
@@ -86,8 +86,15 @@ begin
   fType := 0;
   fErrorCode := 0;
   fName := '';
+  fSize := 0;
+  fMime := '';
+  fExpire := 0;
+  fMD5 := '';
+  fSHA256 := '';
+  fPosition := 0;
   fContent := nil;
   fContentSize := 0;
+  fUser := 0;
   fArgs := nil;
 end;
 

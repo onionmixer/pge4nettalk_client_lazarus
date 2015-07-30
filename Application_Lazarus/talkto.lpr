@@ -7,7 +7,7 @@ uses
   cthreads,
   {$ENDIF}{$ENDIF}
   Interfaces, // this includes the LCL widgetset
-  Forms, main, chat, lazrichview, login, filelist, invite;
+  Forms, main, chat, lazrichview, login, filelist, invite, hash;
 
 {$R *.res}
 

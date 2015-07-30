@@ -7,7 +7,7 @@ interface
 uses
   Classes, SysUtils, FileUtil, Forms, Controls, Graphics, Dialogs, Menus,
   ComCtrls, StdCtrls, ExtCtrls, Contnrs, syncobjs, LMessages, ChatLabel,
-  NetworkInterface, TwistedKnot, chat, cDataStructs;
+  NetworkInterface, TwistedKnot, chat, cDataStructs, hash;
 
 type
 
@@ -53,6 +53,7 @@ type
     fUploadList: TStringList;
     fSenderList: TObjectList;
     fFormSync: TCriticalSection;
+    fHashThread: THashThread;
 
     fLeftSkin, fRightSkin, fSelectSkin: TChatSkin;
 
@@ -76,6 +77,8 @@ type
     function GetNick(User: String): String;
     procedure AddUpload(Target, FileName: String);
     procedure FileShare(Target, FileSeq: String);
+    procedure FileDownload(Seq: DWord);
+    procedure HashResult(Target, FileName, MD5, SHA256: String);
 
     property ConfigFile: String read fConfigFile;
     property Connected: Boolean read GetConnected;
@@ -94,7 +97,7 @@ implementation
 
 uses
   login, filelist,
-  LCLType, IniFiles, DateUtils, LazUTF8Classes, cHash,
+  LCLType, IniFiles, DateUtils, LazFileUtils, LazUTF8Classes, cHash,
   OZFTalkTo, Session, CargoCompany;
 
 { TFormMain }
@@ -148,6 +151,7 @@ begin
   fNickList := TStringDictionary.Create;
   fUploadList := TStringList.Create;
   fSenderList := TObjectList.create(False);
+  fHashThread := THashThread.Create;
 
   MenuConnect.Caption := '&Connect...';
   MenuFileList.Enabled := False;
@@ -177,6 +181,8 @@ var
   i: Integer;
   Chat: TFormChat;
 begin
+  fHashThread.Terminate;
+
   tt := TTalkTo.Create;
   tt.functionID := TalkToFunctionIDQuit;
 
@@ -570,7 +576,7 @@ begin
       try
         fsIn := TFileStreamUTF8.Create(filename, fmOpenRead);
         fsIn.Seek(cargo.Position, soBeginning);
-        size := fsIn.Size - cargo.position;
+        size := fsIn.Size - cargo.Position;
         if size > 1024*1024 then
           size := 1024*1024;
         data := GetMem(size);
@@ -621,19 +627,6 @@ begin
   end
   else if cargo.Command = CargoCompanyTypeTransfer then
   begin
-    if not fRequests.HasItem(Receiver.UniqueID) then
-    begin
-      cont := False;
-      if fFileNames.HasItem(cargo.Seq) then
-      begin
-        SaveDialog1.FileName := fFileNames[cargo.Seq];
-        cont := SaveDialog1.Execute;
-      end;
-      if cont And FileExistsUTF8(SaveDialog1.FileName) then
-        cont := Application.MessageBox('Overwrite exists file?', 'Overwrite', MB_YESNO) = IDYES;
-      if cont then
-        fRequests[Receiver.UniqueID] := 'DN' + SaveDialog1.FileName;
-    end;
     if fRequests.HasItem(Receiver.UniqueID) then
     begin
       str := fRequests[Receiver.UniqueID];
@@ -1095,11 +1088,7 @@ end;
 
 procedure TFormMain.AddUpload(Target, FileName: String);
 begin
-  fFormSync.Enter;
-  fUploadList.Add(Target + '|' + FileName);
-  fFormSync.Leave;
-  if not fUploadNow then
-    FileUpload;
+  fHashThread.addFile(Target, FileName);
 end;
 
 procedure TFormMain.FileShare(Target, FileSeq: String);
@@ -1137,6 +1126,69 @@ begin
   fRequests[uniqueID] := 'SH' + Target;
 end;
 
+procedure TFormMain.FileDownload(Seq: DWord);
+var
+  download: String;
+  nextpos: Int64;
+  cargo: TCargoCompany;
+  data: Pointer;
+  size, UniqueID: DWord;
+begin
+  if not fFileNames.HasItem(Seq) then
+  begin
+    Application.MessageBox('Invalid action', 'Confirm', MB_ICONERROR);
+    exit;
+  end;
+
+  download := '';
+  nextpos := 0;
+  SaveDialog1.FileName := fFileNames[cargo.Seq];
+
+  if SaveDialog1.Execute then
+  begin
+    download := SaveDialog1.FileName;
+    if FileExistsUTF8(download) then
+    begin
+      if Application.MessageBox('Resume download?', 'Resume', MB_YESNO) = IDYES then
+        nextpos := FileSizeUTF8(download);
+    end;
+  end;
+
+  if download = '' then
+    exit;
+
+  if (nextpos = 0) and FileExistsUTF8(download) then
+  begin
+    DeleteFileUTF8(download);
+  end;
+
+  cargo := TCargoCompany.Create;
+  cargo.Command := CargoCompanyTypeDownload;
+  cargo.Seq := Seq;
+  cargo.Position := nextpos;
+
+  data := cargo.getData(size);
+  cargo.Free;
+
+  UniqueID := SendData(data, size, CargoCompanyID);
+  fRequests[UniqueID] := 'DN' + download;
+end;
+
+procedure TFormMain.HashResult(Target, FileName, MD5, SHA256: String);
+begin
+  if SHA256 = '' then
+  begin
+    Application.MessageBox(PChar(MD5), 'File I/O Error', MB_ICONERROR);
+    exit;
+  end;
+
+  fFormSync.Enter;
+  fUploadList.Add(Target + '|' + FileName + '|' + MD5 + '|' + SHA256);
+  fFormSync.Leave;
+  if not fUploadNow then
+    FileUpload;
+end;
+
 function TFormMain.SendData(data: Pointer; size, toAddress: DWord): DWord;
 begin
   Result := fNetwork.getUniqueID;
@@ -1157,13 +1209,13 @@ procedure TFormMain.FileUpload;
 var
   upload, user: String;
   cut: Integer;
+  filesize: Int64;
   cargo: TCargoCompany;
-  fsIn: TFileStreamUTF8;
-  size, read: DWord;
+  size: DWord;
   data: Pointer;
   uniqueID: DWord;
-  md5: T128BitDigest;
-  sha256: T256BitDigest;
+  md5: String;
+  sha256: String;
 begin
   while True do
   begin
@@ -1183,6 +1235,14 @@ begin
     user := Copy(upload, 1, cut - 1);
     Delete(upload, 1, cut);
 
+    cut := Pos('|', upload);
+    sha256 := Copy(upload, cut + 1, Length(upload));
+    upload := Copy(upload, 1, cut - 1);
+
+    cut := Pos('|', sha256);
+    md5 := Copy(sha256, 1, cut - 1);
+    Delete(sha256, 1, cut);
+
     if not FileExistsUTF8(upload) then
     begin
       Application.MessageBox('File not found', 'Confirm', MB_ICONERROR);
@@ -1192,54 +1252,19 @@ begin
 
     if DirectoryExistsUTF8(upload) then
     begin
+      Application.MessageBox('Invalid file', 'Confirm', MB_ICONERROR);
       fUploadNow := False;
       continue;
     end;
 
-    data := nil;
-
-    try
-      fsIn := TFileStreamUTF8.Create(upload, fmOpenRead);
-      size := fsIn.Size;
-      data := GetMem(size);
-      if data = nil then
-      begin
-        FreeAndNil(fsIn);
-        Application.MessageBox('Not enough memory', 'Confirm', MB_ICONERROR);
-        fUploadNow := False;
-        continue;
-      end;
-      read := fsIn.Read(data^, size);
-      FreeAndNil(fsIn);
-    except
-      on E: Exception do
-      begin
-        Application.MessageBox(PChar(E.Message), 'File I/O Error', MB_ICONERROR);
-        if data <> nil then
-          FreeMem(data);
-        fUploadNow := False;
-        continue;
-      end;
-    end;
-
-    if size <> read then
-    begin
-      Application.MessageBox('Error on file reading', 'Confirm', MB_ICONERROR);
-      FreeMem(data);
-      fUploadNow := False;
-      continue;
-    end;
-
-    md5 := CalcMD5(data^, size);
-    sha256 := CalcSHA256(data^, size);
-    FreeMem(data);
+    filesize := FileSizeUTF8(upload);
 
     cargo := TCargoCompany.Create;
     cargo.Command := CargoCompanyTypeUploadRequest;
     cargo.Name := ExtractFileName(upload);
-    cargo.Size := size;
-    cargo.MD5 := DigestToHexA(md5, sizeof(md5));
-    cargo.SHA256 := DigestToHexA(sha256, sizeof(sha256));
+    cargo.Size := filesize;
+    cargo.MD5 := md5;
+    cargo.SHA256 := sha256;
 
     data := cargo.getData(size);
     cargo.Free;
@@ -1247,7 +1272,7 @@ begin
     uniqueID :=  SendData(data, size, CargoCompanyID);
     fRequests[uniqueID] := 'UP' + upload + '|' + user;
     fUploadPos[uniqueID] := 0;
-    fUploadSize[uniqueID] := read;
+    fUploadSize[uniqueID] := filesize;
 
     break;
   end;

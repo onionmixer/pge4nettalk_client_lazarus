@@ -233,18 +233,8 @@ begin
 end;
 
 procedure TFormChat.RichView1Jump(Sender: TObject; id: Integer);
-var
-  cargo: TCargoCompany;
-  data: Pointer;
-  size: DWord;
 begin
-  cargo := TCargoCompany.Create;
-  cargo.Command := CargoCompanyTypeDownload;
-  cargo.Seq := StrToInt(fJumpSeq[id]);
-
-  data := cargo.getData(size);
-  FormMain.SendData(data, size, CargoCompanyID);
-  cargo.Free;
+  FormMain.FileDownload(StrToInt(fJumpSeq[id]));
 end;
 
 procedure TFormChat.RichView1KeyDown(Sender: TObject; var Key: Word;
