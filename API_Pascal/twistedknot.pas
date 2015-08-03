@@ -37,10 +37,10 @@ type
   TTwistedKnot = class
   public
     procedure notify(Status: TTwistedKnotStatus); virtual;
-    procedure sendStart(Sender: TTwistedKnotSender); virtual;
+    procedure sendStart(Address, UniqueID, StreamID: DWord); virtual;
     procedure sendCompleted(Sender: TTwistedKnotSender); virtual;
-    function canReceive(UniqueID, From, Length: Cardinal): Boolean; virtual;
-    procedure receiveStart(Receiver: TTwistedKnotReceiver); virtual;
+    function canReceive(Address, UniqueID, Length: DWord): Boolean; virtual;
+    procedure receiveStart(Address, UniqueID, StreamID: DWord); virtual;
     procedure receiveCompleted(Receiver: TTwistedKnotReceiver); virtual;
   end;
 
@@ -104,6 +104,14 @@ type
     procedure Connect;
     procedure Close;
 
+    function querySendProgress(Address, StreamID: DWord): DWord;
+    function querySendLength(Address, StreamID: DWord): DWord;
+    function cancelSend(Address, StreamID: DWord): Boolean;
+
+    function queryReceiveProgress(Address, StreamID: DWord): DWord;
+    function queryReceiveLength(Address, StreamID: DWord): DWord;
+    function cancelReceive(Address, StreamID: DWord): Boolean;
+
     property PublicKey: String read fPublicKey write fPublicKey;
     property Address: String read fAddress write fAddress;
     property Port: Integer read fPort write fPort;
@@ -112,70 +120,66 @@ type
     property Handler: TTwistedKnot read fHandler write fHandler;
     property LastReceived: TDateTime read fLastReceived;
   end;
-  
-  { TTwistedKnotSender }
 
-  TTwistedKnotSender = class
-  private
+  { TTwistedKnotStream }
+
+  TTwistedKnotStream = class
+  protected
     fStreamID: Cardinal;
     fStatus: TTwistedKnotStreamStatus;
     fUniqueID: Cardinal;
-    fToAddress: Cardinal;
+    fAddress: Cardinal;
     fLength: Integer;
-    fSent: Integer;
+    fProgress: Integer;
+
     fBuffer: Pointer;
     fFrameFlags: Array of Byte;
     fFrameCount: Integer;
-    fNextFrameNo: Integer;
     fSection: TCriticalSection;
+
+    function getBuffer: Pointer; virtual;
   public
-    constructor Create(buffer: Pointer; length, streamID, uniqueID, toAddress: Cardinal);
+    constructor Create;
+    destructor Destroy; override;
+
+    property StreamID: Cardinal read fStreamID;
+    property Status: TTwistedKnotStreamStatus read fStatus write fStatus;
+    property UniqueID: Cardinal read fUniqueID;
+    property Address: Cardinal read fAddress;
+    property Length: Integer read fLength;
+    property Progress: Integer read fProgress;
+    property Buffer: Pointer read getBuffer;
+  end;
+  
+  { TTwistedKnotSender }
+
+  TTwistedKnotSender = class(TTwistedKnotStream)
+  private
+    fNextFrameNo: Integer;
+  public
+    constructor Create(SendBuffer: Pointer; SendLength, SendStreamID, SendUniqueID, SendAddress: Cardinal);
     destructor Destroy; override;
 
     procedure rewindFrameNo;
     function getNextFrameNo: Integer;
     function getFrame(frame: Pointer; frameNo: Integer): Integer;
     procedure markFrame(frameNo: Integer);
-
-    property StreamID: Cardinal read fStreamID;
-    property Status: TTwistedKnotStreamStatus read fStatus write fStatus;
-    property UniqueID: Cardinal read fUniqueID;
-    property ToAddress: Cardinal read fToAddress;
-    property Length: Integer read fLength;
-    property Sent: Integer read fSent;
   end;
 
   { TTwistedKnotReceiver }
 
-  TTwistedKnotReceiver = class
+  TTwistedKnotReceiver = class(TTwistedKnotStream)
   private
-    fStreamID: Cardinal;
-    fStatus: TTwistedKnotStreamStatus;
-    fUniqueID: Cardinal;
-    fFromAddress: Cardinal;
-    fLength: Integer;
-    fReceived: Integer;
-    fBuffer: Pointer;
-    fFrameFlags: Array of Byte;
-    fFrameCount: Integer;
     fReceiveTime: TDateTime;
-    fSection: TCriticalSection;
 
-    function getBuffer: Pointer;
+    function getBuffer: Pointer; override;
   public
-    constructor Create(length, streamID, uniqueID, fromAddress: Cardinal);
+    constructor Create(ReceiveLength, ReceiveStreamID, ReceiveUniqueID, ReceiveAddress: Cardinal);
     destructor Destroy; override;
 
     procedure fillFrame(frame: Pointer; frameNo: Integer);
     function getBytes(bytes: Pointer; pos, len: Cardinal): Boolean;
 
-    property StreamID: Cardinal read fStreamID;
-    property Status: TTwistedKnotStreamStatus read fStatus write fStatus;
-    property UniqueID: Cardinal read fUniqueID;
-    property FromAddress: Cardinal read fFromAddress;
-    property Length: Integer read fLength;
-    property Received: Integer read fReceived;
-    property Buffer: Pointer read getBuffer;
     property ReceiveTime: TDateTime read fReceiveTime;
   end;
 
@@ -256,7 +260,7 @@ begin
 
 end;
 
-procedure TTwistedKnot.sendStart(Sender: TTwistedKnotSender);
+procedure TTwistedKnot.sendStart(Address, UniqueID, StreamID: DWord);
 begin
 
 end;
@@ -266,12 +270,12 @@ begin
   Sender.Free;
 end;
 
-function TTwistedKnot.canReceive(UniqueID, From, Length: Cardinal): Boolean;
+function TTwistedKnot.canReceive(Address, UniqueID, Length: DWord): Boolean;
 begin
   result := True;
 end;
 
-procedure TTwistedKnot.receiveStart(Receiver: TTwistedKnotReceiver);
+procedure TTwistedKnot.receiveStart(Address, UniqueID, StreamID: DWord);
 begin
 
 end;
@@ -550,7 +554,7 @@ begin
         uniqueID := getLong(decrypt[24]);
 
         if Assigned(fHandler) then
-          query := fHandler.canReceive(uniqueID, from, streamLength)
+          query := fHandler.canReceive(from, uniqueID, streamLength)
         else
           query := True;
 
@@ -560,7 +564,7 @@ begin
             uniqueID, from);
 
           if Assigned(fHandler) then
-            fHandler.receiveStart(receiver);
+            fHandler.receiveStart(receiver.Address, receiver.UniqueID, receiver.StreamID);
 
           key := IntToStr(from) + ':' + IntToStr(streamID);
           fReceivers.Add(key, receiver);
@@ -645,7 +649,7 @@ begin
         if sender.Status = TwistedKnotStreamReady then
         begin
           if Assigned(fHandler) then
-            fHandler.sendStart(sender);
+            fHandler.sendStart(sender.Address, sender.UniqueID, sender.StreamID);
         end;
       end
       else if packetType = PacketTypePause then
@@ -812,7 +816,7 @@ begin
       putShort(packet + 2, packetLength);
       putLong(packet + 4, 0); // checksum
       putLong(packet + 8, 0); // from
-      putLong(packet + 12, sender.ToAddress);
+      putLong(packet + 12, sender.Address);
       putLong(packet + 16, sender.StreamID);
       putLong(packet + 20, frameNo);
       Move(frame, Pointer(packet + TwistedKnotHeaderLength)^, frameLength);
@@ -1204,7 +1208,7 @@ begin
     if receiver.ReceiveTime > limit then
       break;
     fSection.Release;
-    SendControlPacket(Ord(PacketTypeRetry), receiver.FromAddress,
+    SendControlPacket(Ord(PacketTypeRetry), receiver.Address,
       receiver.StreamID, 0, 0);
     fSection.Acquire;
   end;
@@ -1293,41 +1297,139 @@ begin
   {$ENDIF}
 end;
 
+function TTwistedKnotConnection.querySendProgress(Address, StreamID: DWord
+  ): DWord;
+var
+  key: String;
+  sender: TTwistedKnotSender;
+begin
+  key := IntToStr(Address) + ':' + IntToStr(StreamID);
+  sender := TTwistedKnotSender(fSenders.Items[key]);
+
+  if sender = nil then
+    Result := 0
+  else
+    Result := sender.Progress;
+end;
+
+function TTwistedKnotConnection.querySendLength(Address, StreamID: DWord
+  ): DWord;
+var
+  key: String;
+  sender: TTwistedKnotSender;
+begin
+  key := IntToStr(Address) + ':' + IntToStr(StreamID);
+  sender := TTwistedKnotSender(fSenders.Items[key]);
+
+  if sender = nil then
+    Result := 0
+  else
+    Result := sender.Length;
+end;
+
+function TTwistedKnotConnection.cancelSend(Address, StreamID: DWord): Boolean;
+begin
+
+end;
+
+function TTwistedKnotConnection.queryReceiveProgress(Address, StreamID: DWord
+  ): DWord;
+var
+  key: String;
+  receiver: TTwistedKnotReceiver;
+begin
+  key := IntToStr(Address) + ':' + IntToStr(StreamID);
+  receiver := TTwistedKnotReceiver(fReceivers.Items[key]);
+
+  if receiver = nil then
+    Result := 0
+  else
+    Result := receiver.Progress;
+end;
+
+function TTwistedKnotConnection.queryReceiveLength(Address, StreamID: DWord
+  ): DWord;
+var
+  key: String;
+  receiver: TTwistedKnotReceiver;
+begin
+  key := IntToStr(Address) + ':' + IntToStr(StreamID);
+  receiver := TTwistedKnotReceiver(fReceivers.Items[key]);
+
+  if receiver = nil then
+    Result := 0
+  else
+    Result := receiver.Length;
+end;
+
+function TTwistedKnotConnection.cancelReceive(Address, StreamID: DWord
+  ): Boolean;
+begin
+
+end;
+
+{ TTwistedKnotStream }
+
+function TTwistedKnotStream.getBuffer: Pointer;
+begin
+  Result := nil;
+end;
+
+constructor TTwistedKnotStream.Create;
+begin
+  inherited Create;
+  fSection := syncobjs.TCriticalSection.Create;
+  fBuffer := nil;
+end;
+
+destructor TTwistedKnotStream.Destroy;
+begin
+  inherited Destroy;
+
+  FreeAndNil(fSection);
+
+  if Assigned(fBuffer) then
+  begin
+    FreeMem(fBuffer);
+    fBuffer := nil;
+  end;
+
+  SetLength(fFrameFlags, 0);
+end;
+
 { TTwistedKnotSender }
 
-constructor TTwistedKnotSender.Create(buffer: Pointer; length, streamID,
-  uniqueID, toAddress: Cardinal);
+constructor TTwistedKnotSender.Create(SendBuffer: Pointer; SendLength,
+  SendStreamID, SendUniqueID, SendAddress: Cardinal);
 begin
-  fStreamID := streamID;
-  fUniqueID := uniqueID;
-  fToAddress := toAddress;
+  inherited Create;
 
-  fSent := 0;
-  fNextFrameNo := 0;
+  fStreamID := SendStreamID;
+  fUniqueID := SendUniqueID;
+  fAddress := SendAddress;
+
+  fProgress := 0;
   fStatus := TwistedKnotStreamReady;
 
-  if (buffer = nil) or (length = 0) then
+  fNextFrameNo := 0;
+
+  if (SendBuffer = nil) or (SendLength = 0) then
   begin
     fBuffer := nil;
     fLength := 0;
   end else begin
-    fBuffer := GetMem(length);
-    Move(buffer^, fBuffer^, length);
-    fLength := length;
+    fBuffer := GetMem(SendLength);
+    Move(SendBuffer^, fBuffer^, SendLength);
+    fLength := SendLength;
   end;
 
   fFrameCount := (fLength + TwistedKnotFrameLength - 1) div TwistedKnotFrameLength;
   SetLength(fFrameFlags, fFrameCount);
   FillChar(fFrameFlags[0], fFrameCount, #0);
-  fSection := syncobjs.TCriticalSection.Create;
 end;
 
 destructor TTwistedKnotSender.Destroy;
 begin
-  if Assigned(fBuffer) then
-    FreeMem(fBuffer);
-  SetLength(fFrameFlags, 0);
-  fSection.Free;
   inherited Destroy;
 end;
 
@@ -1393,9 +1495,9 @@ begin
       frameLength := TwistedKnotFrameLength;
 
     fFrameFlags[frameNo] := 1;
-    inc(fSent, frameLength);
+    inc(fProgress, frameLength);
 
-    if fLength = fSent then
+    if fLength = fProgress then
       fStatus := TwistedKnotStreamComplete;
   end;
   fSection.Release;
@@ -1405,25 +1507,27 @@ end;
 
 function TTwistedKnotReceiver.getBuffer: Pointer;
 begin
-  if fLength = fReceived then
+  if fLength = fProgress then
     result := fBuffer
   else
     result := nil;
 end;
 
-constructor TTwistedKnotReceiver.Create(length, streamID, uniqueID,
-  fromAddress: Cardinal);
+constructor TTwistedKnotReceiver.Create(ReceiveLength, ReceiveStreamID,
+  ReceiveUniqueID, ReceiveAddress: Cardinal);
 begin
-  fLength := length;
-  fStreamID := streamID;
-  fUniqueID := uniqueID;
-  fFromAddress := fromAddress;
+  inherited Create;
 
-  fReceived := 0;
+  fLength := ReceiveLength;
+  fStreamID := ReceiveStreamID;
+  fUniqueID := ReceiveUniqueID;
+  fAddress := ReceiveAddress;
+
+  fProgress := 0;
   fStatus := TwistedKnotStreamReady;
   fReceiveTime := Now;
 
-  if length = 0 then
+  if fLength = 0 then
   begin
     fFrameCount := 0;
     fBuffer := nil;
@@ -1434,15 +1538,10 @@ begin
 
   SetLength(fFrameFlags, fFrameCount);
   FillChar(fFrameFlags[0], fFrameCount, #0);
-  fSection := syncobjs.TCriticalSection.Create;
 end;
 
 destructor TTwistedKnotReceiver.Destroy;
 begin
-  if Assigned(fBuffer) then
-    FreeMem(fBuffer);
-  SetLength(fFrameFlags, 0);
-  fSection.Free;
   inherited Destroy;
 end;
 
@@ -1466,11 +1565,11 @@ begin
     byteBuffer := PByte(fBuffer) + (frameNo * TwistedKnotFrameLength);
     Move(frame^, byteBuffer^, frameLength);
     fFrameFlags[frameNo] := 1;
-    inc(fReceived, frameLength);
+    inc(fProgress, frameLength);
 
     fReceiveTime := Now;
 
-    if fLength = fReceived then
+    if fLength = fProgress then
       fStatus := TwistedKnotStreamComplete
     else
       fStatus := TwistedKnotStreamTransfer;

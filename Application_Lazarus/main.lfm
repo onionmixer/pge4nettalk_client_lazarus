@@ -35,6 +35,7 @@ object FormMain: TFormMain
         Width = 50
       end>
     SimplePanel = False
+    OnClick = StatusBar1Click
   end
   object MainMenu1: TMainMenu
     left = 120

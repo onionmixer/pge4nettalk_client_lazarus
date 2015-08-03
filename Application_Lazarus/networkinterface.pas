@@ -17,6 +17,29 @@ const
 
 type
 
+  { TNetworkEvent }
+
+  TNetworkEvent = class(TObject)
+  private
+    fStatus: Integer;
+    fReceive: Boolean;
+    fAddress: DWord;
+    fUniqueID: DWord;
+    fStreamID: DWord;
+    fStream: TTwistedKnotStream;
+  public
+    constructor Create(Status: Integer; Address, UniqueID, StreamID: DWord);
+    constructor Create(Status: Integer; Stream: TTwistedKnotStream);
+    destructor Destroy; override;
+
+    property Status: Integer read fStatus;
+    property isReceive: Boolean read fReceive;
+    property Address: DWord read fAddress;
+    property UniqueID: DWord read fUniqueID;
+    property StreamID: Dword read fStreamID;
+    property Stream: TTwistedKnotStream read fStream;
+  end;
+
   { TNetworkInterface }
 
   TNetworkInterface = class(TTwistedKnot)
@@ -25,7 +48,7 @@ type
     fKeepAlive: TThread;
     fLastUniqueID: DWord;
     fSection: TCriticalSection;
-    fItems: TObjectList;
+    fEventList: TObjectList;
     fStatus: TStringList;
 
     function getConnected: Boolean;
@@ -38,15 +61,16 @@ type
     procedure Reconnect;
     procedure Close;
     procedure send(Data: Pointer; Len: Integer; UniqueID, toAddress:DWord);
-    function getItem(var Status: Integer): TObject;
+    function querySendProgress(Address, StreamID: DWord): DWord;
+    function getEvent: TNetworkEvent;
 
     function getUniqueID:DWord;
 
     procedure notify(Status: TTwistedKnotStatus); override;
-    procedure sendStart(Sender: TTwistedKnotSender); override;
+    procedure sendStart(Address, UniqueID, StreamID: DWord); override;
     procedure sendCompleted(Sender: TTwistedKnotSender); override;
-    function canReceive(UniqueID, From, Length: Cardinal): Boolean; override;
-    procedure receiveStart(Receiver: TTwistedKnotReceiver); override;
+    function canReceive(Address, UniqueID, Length: Cardinal): Boolean; override;
+    procedure receiveStart(Address, UniqueID, StreamID: DWord); override;
     procedure receiveCompleted(Receiver: TTwistedKnotReceiver); override;
 
     property Connected: Boolean read getConnected;
@@ -80,6 +104,40 @@ type
 
     property Connection: TTwistedKnotConnection write fConnection;
   end;
+
+{ TNetworkEvent }
+
+constructor TNetworkEvent.Create(Status: Integer; Address, UniqueID,
+  StreamID: DWord);
+begin
+  inherited Create;
+
+  fStatus := Status;
+  fAddress := Address;
+  fUniqueID := UniqueID;
+  fStreamID := StreamID;
+  fStream := nil;
+
+  fReceive := (fStatus >= NetworkInterfaceReceiveStart);
+end;
+
+constructor TNetworkEvent.Create(Status: Integer; Stream: TTwistedKnotStream);
+begin
+  inherited Create;
+
+  fStatus := Status;
+  fAddress := Stream.Address;
+  fUniqueID := Stream.UniqueID;
+  fStreamID := Stream.StreamID;
+  fStream := Stream;
+
+  fReceive := (fStatus >= NetworkInterfaceReceiveStart);
+end;
+
+destructor TNetworkEvent.Destroy;
+begin
+  inherited Destroy;
+end;
 
 { TKeepAliveThread }
 
@@ -118,9 +176,9 @@ end;
 
 constructor TNetworkInterface.Create;
 begin
-  fLastUniqueID := 0;
+  fLastUniqueID := 1;
   fSection := syncobjs.TCriticalSection.Create;
-  fItems := TObjectList.Create(False);
+  fEventList := TObjectList.Create(False);
   fStatus := TStringList.Create;
 
   fConnection := TTwistedKnotConnection.Create;
@@ -146,7 +204,7 @@ begin
   fConnection := nil;
 
   fSection.Free;
-  fItems.Free;
+  fEventList.Free;
   fStatus.Free;
 end;
 
@@ -178,18 +236,20 @@ begin
   fConnection.Send(Data, Len, UniqueID, toAddress);
 end;
 
-function TNetworkInterface.getItem(var Status: Integer): TObject;
+function TNetworkInterface.querySendProgress(Address, StreamID: DWord): DWord;
+begin
+  Result := fConnection.querySendProgress(Address, StreamID);
+end;
+
+function TNetworkInterface.getEvent: TNetworkEvent;
 begin
   Result := nil;
-  Status := 0;
 
   fSection.Acquire;
-  if fItems.Count > 0 then
+  if fEventList.Count > 0 then
   begin
-    Result := fItems.Items[0];
-    Status := StrToInt(fStatus[0]);
-    fItems.Delete(0);
-    fStatus.Delete(0);
+    Result := fEventList[0] as TNetworkEvent;
+    fEventList.Delete(0);
   end;
   fSection.Release;
 end;
@@ -198,6 +258,8 @@ function TNetworkInterface.getUniqueID: DWord;
 begin
   fSection.Acquire;
   fLastUniqueID := DWord(fLastUniqueID + 1);
+  if fLastUniqueID = 0 then
+    fLastUniqueID := 1;
   Result := fLastUniqueID;
   fSection.Release;
 end;
@@ -207,44 +269,52 @@ begin
   PostMessage(FormMain.Handle, NI_STATUS, Ord(Status), 0);
 end;
 
-procedure TNetworkInterface.sendStart(Sender: TTwistedKnotSender);
+procedure TNetworkInterface.sendStart(Address, UniqueID, StreamID: DWord);
+var
+  event: TNetworkEvent;
 begin
+  event := TNetworkEvent.Create(NetworkInterfaceSendStart, Address, UniqueID, StreamID);
   fSection.Acquire;
-  fItems.Add(Sender);
-  fStatus.Add(IntToStr(NetworkInterfaceSendStart));
+  fEventList.Add(event);
   fSection.Release;
   PostMessage(FormMain.Handle, NI_EVENT, 0, 0);
 end;
 
 procedure TNetworkInterface.sendCompleted(Sender: TTwistedKnotSender);
+var
+  event: TNetworkEvent;
 begin
+  event := TNetworkEvent.Create(NetworkInterfaceSendComplete, Sender);
   fSection.Acquire;
-  fItems.Add(Sender);
-  fStatus.Add(IntToStr(NetworkInterfaceSendComplete));
+  fEventList.Add(event);
   fSection.Release;
   PostMessage(FormMain.Handle, NI_EVENT, 0, 0);
 end;
 
-function TNetworkInterface.canReceive(UniqueID, From, Length: Cardinal
+function TNetworkInterface.canReceive(Address, UniqueID, Length: Cardinal
   ): Boolean;
 begin
   Result := True;
 end;
 
-procedure TNetworkInterface.receiveStart(Receiver: TTwistedKnotReceiver);
+procedure TNetworkInterface.receiveStart(Address, UniqueID, StreamID: DWord);
+var
+  event: TNetworkEvent;
 begin
+  event := TNetworkEvent.Create(NetworkInterfaceReceiveStart, Address, UniqueID, StreamID);
   fSection.Acquire;
-  fItems.Add(Receiver);
-  fStatus.Add(IntToStr(NetworkInterfaceReceiveStart));
+  fEventList.Add(event);
   fSection.Release;
   PostMessage(FormMain.Handle, NI_EVENT, 0, 0);
 end;
 
 procedure TNetworkInterface.receiveCompleted(Receiver: TTwistedKnotReceiver);
+var
+  event: TNetworkEvent;
 begin
+  event := TNetworkEvent.Create(NetworkInterfaceReceiveComplete, Receiver);
   fSection.Acquire;
-  fItems.Add(Receiver);
-  fStatus.Add(IntToStr(NetworkInterfaceReceiveComplete));
+  fEventList.Add(event);
   fSection.Release;
   PostMessage(FormMain.Handle, NI_EVENT, 0, 0);
 end;

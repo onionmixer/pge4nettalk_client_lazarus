@@ -19,6 +19,8 @@ const
   CargoCompanyTypeDownload:Word = $444E;
   /// TR: 파일 조각 전송
   CargoCompanyTypeTransfer:Word = $5452;
+  /// CX: 파일 전송 취소
+  CargoCompanyTypeCancel:Word = $4358;
   /// RE: 요청 결과
   CargoCompanyTypeResult:Word = $5245;
   /// RM: 파일 삭제

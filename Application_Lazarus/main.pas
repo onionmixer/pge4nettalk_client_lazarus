@@ -29,6 +29,7 @@ type
     procedure MenuConnectClick(Sender: TObject);
     procedure MenuFileListClick(Sender: TObject);
     procedure MenuExitClick(Sender: TObject);
+    procedure StatusBar1Click(Sender: TObject);
     procedure Timer1Timer(Sender: TObject);
     procedure TreeView1DblClick(Sender: TObject);
   private
@@ -38,7 +39,8 @@ type
     fNetworkStatus: TTwistedKnotStatus;
     fAuth: Boolean;
     fUser: String;
-    fUploadNow: Boolean;
+    fUploadID, fUploadAddress, fUploadStreamID:DWord;
+    fUploadSeq, fUploadPos, fUploadSize: DWord;
     fChatForm: TObjectList;
     fChatUser: TStringList;
     fSendForm: TObjectList;
@@ -48,7 +50,6 @@ type
     fRequests: TSparseStringArray;
     fFileNames: TSparseStringArray;
     fFileSizes: TSparseInt64Array;
-    fUploadPos, fUploadSize: TSparseInt64Array;
     fNickList: TStringDictionary;
     fUploadList: TStringList;
     fSenderList: TObjectList;
@@ -135,7 +136,10 @@ begin
 
   fFormSync := syncobjs.TCriticalSection.Create;
   fAuth := False;
-  fUploadNow := False;
+  fUploadID := 0;
+  fUploadPos := 0;
+  fUploadSize := 0;
+
   fNetwork := TNetworkInterface.Create;
   fChatForm := TObjectList.Create(False);
   fChatUser := TStringList.Create;
@@ -146,8 +150,6 @@ begin
   fRequests := TSparseStringArray.Create;
   fFileNames := TSparseStringArray.Create;
   fFileSizes := TSparseInt64Array.Create;
-  fUploadPos := TSparseInt64Array.Create;
-  fUploadSize := TSparseInt64Array.Create;
   fNickList := TStringDictionary.Create;
   fUploadList := TStringList.Create;
   fSenderList := TObjectList.create(False);
@@ -248,6 +250,31 @@ begin
   Application.Terminate;
 end;
 
+procedure TFormMain.StatusBar1Click(Sender: TObject);
+var
+  seq: DWord;
+  cargo: TCargoCompany;
+  data: Pointer;
+  size: DWord;
+begin
+  if fUploadID = 0 then
+    exit;
+
+  seq := fUploadSeq;
+
+  if Application.MessageBox('Cancel this upload?', 'Confirm', MB_YESNO) <> IDYES then
+    exit;
+
+  cargo := TCargoCompany.Create;
+  cargo.Command := CargoCompanyTypeCancel;
+  cargo.Seq := seq;
+
+  data := cargo.getData(size);
+  cargo.Free;
+
+  SendData(data, size, CargoCompanyID);
+end;
+
 procedure TFormMain.Timer1Timer(Sender: TObject);
 const
   units: array[0..4] of String = ('B', 'KB', 'MB', 'GB', 'TB');
@@ -257,7 +284,7 @@ var
   result: String;
   i: Integer;
 begin
-  if fSenderList.Count = 0 then
+  if fUploadID = 0 then
   begin
     if fNetworkStatus = TwistedKnotStatusDisconnect then
       StatusBar1.Panels[0].Text := 'Disconnected'
@@ -266,24 +293,13 @@ begin
     exit;
   end;
 
-  sent := 0;
-  total := 0;
+  sent := fUploadPos;
+  total := fUploadSize;
 
-  fFormSync.Acquire;
-  for i := 0 to fSenderList.Count - 1 do
+  if fUploadAddress <> 0 then
   begin
-    item := fSenderList.Items[i] as TTwistedKnotSender;
-
-    sent := sent + item.Sent;
-    if fUploadPos.HasItem(item.UniqueID) then
-      sent := sent + fUploadPos[item.UniqueID];
-
-    if fUploadSize.HasItem(item.UniqueID) then
-      total := total + fUploadSize[item.UniqueID]
-    else
-      total := total + item.Length;
+    sent := sent + fNetwork.querySendProgress(fUploadAddress, fUploadStreamID);
   end;
-  fFormSync.Release;
 
   for i := 0 to 4 do
   begin
@@ -292,7 +308,10 @@ begin
     sent := sent / 1024;
   end;
 
-  result := Format('%.2f', [sent]) + ' ' + units[i];
+  if i = 0 then
+    result := IntToStr(Trunc(sent)) + ' ' + units[i]
+  else
+    result := Format('%.2f', [sent]) + ' ' + units[i];
 
   for i := 0 to 4 do
   begin
@@ -301,7 +320,10 @@ begin
     total := total / 1024;
   end;
 
-  result := result + ' / ' + Format('%.2f', [total]) + ' ' + units[i];
+  if i = 0 then
+    result := result + ' / ' + IntToStr(Trunc(total)) + ' ' + units[i]
+  else
+    result := result + ' / ' + Format('%.2f', [total]) + ' ' + units[i];
 
   if fNetworkStatus = TwistedKnotStatusDisconnect then
     StatusBar1.Panels[0].Text := 'Disconnected, Upload: ' + result
@@ -321,70 +343,60 @@ end;
 
 procedure TFormMain.OnNetworkEvent(var Msg: TLMessage);
 var
-  Item: TObject;
-  Status: Integer;
+  Event: TNetworkEvent;
   Sender: TTwistedKnotSender;
   Receiver: TTwistedKnotReceiver;
-  service: Word;
-  request: String;
 begin
   while true do
   begin
-    Item := fNetwork.getItem(Status);
-    if Item = nil then
+    Event := fNetwork.getEvent;
+    if Event = nil then
       break;
 
-    if Item is TTwistedKnotSender then
+    if Event.isReceive then
     begin
-      Sender := Item as TTwistedKnotSender;
+      if Event.Status <> NetworkInterfaceReceiveComplete then
+        continue;
 
-      request := '';
-      if fRequests.HasItem(Sender.UniqueID) then
-        request := fRequests[Sender.UniqueID];
+      Receiver := Event.Stream as TTwistedKnotReceiver;
 
-      if Copy(request, 1, 2) = 'UP' then
+      if Receiver = nil then
+        break;
+
+      if Receiver.Length < 2 then
       begin
-        fFormSync.Acquire;
-        if Status = NetworkInterfaceSendStart then
-          fSenderList.Add(Sender)
-        else
-          fSenderList.Remove(Sender);
-        fFormSync.Release;
+        Receiver.Free;
+        continue;
       end;
 
-      if Status = NetworkInterfaceSendComplete then
-        Sender.Free;
+      if Receiver.Address = SessionID then
+        OnSession(Receiver)
+      else if Receiver.Address = TalkToID then
+        OnTalkTo(Receiver)
+      else if Receiver.Address = CargoCompanyID then
+        OnCargoCompany(Receiver);
 
-      continue;
-    end;
-
-    if Status <> NetworkInterfaceReceiveComplete then
-      continue;
-
-    Receiver := Item as TTwistedKnotReceiver;
-
-    if Receiver = nil then
-      break;
-
-    if Receiver.Length < 2 then
-    begin
       Receiver.Free;
-      continue;
+    end
+    else
+    begin
+      if Event.UniqueID = fUploadID then
+      begin
+        fUploadAddress := Event.Address;
+        fUploadStreamID := Event.StreamID;
+      end;
+
+      if Event.Status <> NetworkInterfaceSendComplete then
+        continue;
+
+      Sender := Event.Stream as TTwistedKnotSender;
+      Sender.Free;
+
+      fUploadAddress := 0;
+      fUploadStreamID := 0;
     end;
 
-    Move(Receiver.Buffer^, service, 2);
-    {$ifndef FPC_BIG_ENDIAN}
-    service := swap(service);
-    {$endif}
-
-    if service = SessionID then
-      OnSession(Receiver)
-    else if service = TalkToID then
-      OnTalkTo(Receiver)
-    else if service = CargoCompanyID then
-      OnCargoCompany(Receiver);
-
-    Receiver.Free;
+    FreeAndNil(Event);
   end;
 end;
 
@@ -557,10 +569,18 @@ begin
 
   if cargo.ErrorCode <> 0 then
   begin
+    if (cargo.Command = CargoCompanyTypeResult) And
+      (cargo.ResultType = CargoCompanyTypeUpload) then
+    begin
+      fUploadID := 0;
+      FileUpload;
+    end;
+
     if cargo.ErrorCode = 1 then
       str := 'invalid value'
     else
       str := 'server error';
+
     Application.MessageBox(PChar(str), 'Cargo Company Error', 0);
   end
   else if cargo.Command = CargoCompanyTypeUpload then
@@ -570,6 +590,7 @@ begin
       str := fRequests[Receiver.UniqueID];
       cut := Pos('|', str);
       filename := Copy(str, 3, cut - 3);
+      fUploadSeq := cargo.seq;
 
       data := nil;
 
@@ -621,7 +642,7 @@ begin
         response.Free;
 
         SendData(data, size, Receiver.UniqueID, CargoCompanyID);
-        fUploadPos[Receiver.UniqueID] := cargo.Position;
+        fUploadPos := cargo.Position;
       end;
     end;
   end
@@ -716,7 +737,13 @@ begin
       end;
     end;
 
-    fUploadNow := False;
+    fUploadID := 0;
+    FileUpload;
+  end
+  else if (cargo.Command = CargoCompanyTypeResult) And
+    (cargo.ResultType = CargoCompanyTypeCancel) then
+  begin
+    fUploadID := 0;
     FileUpload;
   end
   else if (cargo.Command = CargoCompanyTypeResult) And
@@ -1142,7 +1169,7 @@ begin
 
   download := '';
   nextpos := 0;
-  SaveDialog1.FileName := fFileNames[cargo.Seq];
+  SaveDialog1.FileName := fFileNames[Seq];
 
   if SaveDialog1.Execute then
   begin
@@ -1185,7 +1212,7 @@ begin
   fFormSync.Enter;
   fUploadList.Add(Target + '|' + FileName + '|' + MD5 + '|' + SHA256);
   fFormSync.Leave;
-  if not fUploadNow then
+  if fUploadID = 0 then
     FileUpload;
 end;
 
@@ -1221,11 +1248,10 @@ begin
   begin
     upload := '';
     fFormSync.Enter;
-    if not fUploadNow And (fUploadList.Count > 0) then
+    if (fUploadID = 0) And (fUploadList.Count > 0) then
     begin
       upload := fUploadList[0];
       fUploadList.Delete(0);
-      fUploadNow := True;
     end;
     fFormSync.Leave;
     if upload = '' then
@@ -1246,14 +1272,12 @@ begin
     if not FileExistsUTF8(upload) then
     begin
       Application.MessageBox('File not found', 'Confirm', MB_ICONERROR);
-      fUploadNow := False;
       continue;
     end;
 
     if DirectoryExistsUTF8(upload) then
     begin
       Application.MessageBox('Invalid file', 'Confirm', MB_ICONERROR);
-      fUploadNow := False;
       continue;
     end;
 
@@ -1271,8 +1295,12 @@ begin
 
     uniqueID :=  SendData(data, size, CargoCompanyID);
     fRequests[uniqueID] := 'UP' + upload + '|' + user;
-    fUploadPos[uniqueID] := 0;
-    fUploadSize[uniqueID] := filesize;
+
+    fUploadID := uniqueID;
+    fUploadPos := 0;
+    fUploadSize := filesize;
+    fUploadAddress := 0;
+    fUploadStreamID := 0;
 
     break;
   end;

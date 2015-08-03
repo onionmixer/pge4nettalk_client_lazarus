@@ -40,7 +40,9 @@ implementation
 
 {$R *.lfm}
 
-uses main, chat, LCLType, TwistedKnot, CargoCompany;
+uses main, chat,
+  LCLType, LazFileUtils,
+  TwistedKnot, CargoCompany;
 
 { TFormFileList }
 
@@ -59,14 +61,59 @@ end;
 
 procedure TFormFileList.FormDropFiles(Sender: TObject;
   const FileNames: array of String);
+const
+  units: array[0..4] of String = ('B', 'KB', 'MB', 'GB', 'TB');
 var
   FileName: String;
+  FileSize: Double;
+  FileList: TStringList;
+  msg: String;
+  doUpload: Boolean;
+  i: Integer;
 begin
+  FileList := TStringList.Create;
+  FileSize := 0;
   for FileName in FileNames do
   begin
     if not DirectoryExistsUTF8(FileName) then
-      FormMain.AddUpload('', FileName);
+    begin
+      FileList.Add(FileName);
+      FileSize := FileSize + FileSizeUTF8(FileName);
+    end;
   end;
+
+  msg := '';
+  if FileList.Count = 1 then
+    msg := 'Upload 1 file'
+  else if FileList.Count > 1 then
+    msg := 'Upload ' + IntToStr(FileList.Count) + ' files';
+
+  if msg = '' then
+    doUpload := False
+  else
+  begin
+    for i := 0 to 4 do
+    begin
+      if FileSize < 1024 then
+        break;
+      FileSize := FileSize / 1024;
+    end;
+
+    if i = 0 then
+      msg := msg + '(' + IntToStr(Trunc(FileSize)) + ' ' + units[i] + ') ?'
+    else
+      msg := msg + ' (' + Format('%.2f', [FileSize]) + ' ' + units[i] + ') ?';
+
+    doUpload := (Application.MessageBox(PChar(msg), 'Upload', MB_YESNO) = IDYES);
+  end;
+
+  if doUpload then
+  begin
+    for i := 0 to FileList.Count - 1 do
+      FormMain.AddUpload('', FileList[i]);
+  end;
+
+  FileList.Free;
 end;
 
 procedure TFormFileList.SetShare(AValue: String);
