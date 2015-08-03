@@ -659,18 +659,29 @@ begin
         else
           fsOut := TFileStreamUTF8.Create(filename, fmCreate);
 
-        fsOut.Seek(cargo.Position, soBeginning);
-        size := fsOut.Write(cargo.Content^, cargo.ContentSize);
-        nextpos := fsOut.Position;
-        fsOut.Free;
-
-        if cargo.ContentSize <> size then
+        if fsOut.Size < cargo.Position then
         begin
-          Application.MessageBox('Not enough space', 'Confirm', MB_ICONERROR);
+          nextpos := fsOut.Size;
+        end
+        else
+        begin
+          fsOut.Seek(cargo.Position, soBeginning);
+          size := fsOut.Write(cargo.Content^, cargo.ContentSize);
+          nextpos := fsOut.Position;
+          fsOut.Free;
+
+          if cargo.ContentSize <> size then
+          begin
+            Application.MessageBox('Failed to write file', 'File I/O Error', MB_ICONERROR);
+            nextpos := fFileSizes[cargo.Seq];
+          end;
         end;
       except
         on E: Exception do
+        begin
           Application.MessageBox(PChar(E.Message), 'File I/O Error', MB_ICONERROR);
+          nextpos := fFileSizes[cargo.Seq];
+        end;
       end;
 
       if fFileSizes[cargo.Seq] > nextpos then
