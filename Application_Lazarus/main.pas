@@ -655,12 +655,13 @@ begin
 
       try
         if FileExistsUTF8(filename) then
-          fsOut := TFileStreamUTF8.Create(filename, fmOpenRead)
+          fsOut := TFileStreamUTF8.Create(filename, fmOpenWrite)
         else
           fsOut := TFileStreamUTF8.Create(filename, fmCreate);
 
         if fsOut.Size < cargo.Position then
         begin
+          fsOut.Free;
           nextpos := fsOut.Size;
         end
         else
