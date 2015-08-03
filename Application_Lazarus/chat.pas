@@ -53,6 +53,7 @@ type
     procedure SetUser(from, target: String);
     procedure RecvMsg(tt: TTalkTo);
     procedure RecvFile(from, filename, mime: String; seq, size, expire: DWord);
+    procedure Notice(message: String);
 
     property Users: TStringList read fUsers;
   end;
@@ -281,7 +282,7 @@ end;
 
 procedure TFormChat.RichView1Jump(Sender: TObject; id: Integer);
 begin
-  FormMain.FileDownload(StrToInt(fJumpSeq[id]));
+  FormMain.FileDownload(fTargetID, StrToInt(fJumpSeq[id]));
 end;
 
 procedure TFormChat.RichView1KeyDown(Sender: TObject; var Key: Word;
@@ -429,6 +430,14 @@ begin
   if not Showing then Show;
 
   fJumpSeq.Add(IntToStr(seq));
+end;
+
+procedure TFormChat.Notice(message: String);
+begin
+  RichView1.AddTextFromNewLine(message, 0, rvalCenter);
+  RichView1.FormatTail;
+  RichView1.Invalidate;
+  if not Showing then Show;
 end;
 
 end.

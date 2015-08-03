@@ -78,7 +78,7 @@ type
     function GetNick(User: String): String;
     procedure AddUpload(Target, FileName: String);
     procedure FileShare(Target, FileSeq: String);
-    procedure FileDownload(Seq: DWord);
+    procedure FileDownload(Target:String; Seq: DWord);
     procedure HashResult(Target, FileName, MD5, SHA256: String);
 
     property ConfigFile: String read fConfigFile;
@@ -651,7 +651,9 @@ begin
     if fRequests.HasItem(Receiver.UniqueID) then
     begin
       str := fRequests[Receiver.UniqueID];
-      filename := Copy(str, 3, Length(str));
+      cut := Pos('|', str);
+      filename := Copy(str, 3, cut - 3);
+      cont := True;
 
       try
         if FileExistsUTF8(filename) then
@@ -674,18 +676,18 @@ begin
           if cargo.ContentSize <> size then
           begin
             Application.MessageBox('Failed to write file', 'File I/O Error', MB_ICONERROR);
-            nextpos := fFileSizes[cargo.Seq];
+            cont := False;
           end;
         end;
       except
         on E: Exception do
         begin
           Application.MessageBox(PChar(E.Message), 'File I/O Error', MB_ICONERROR);
-          nextpos := fFileSizes[cargo.Seq];
+          cont := False;
         end;
       end;
 
-      if fFileSizes[cargo.Seq] > nextpos then
+      if cont and (fFileSizes[cargo.Seq] > nextpos) then
       begin
         response := TCargoCompany.Create;
         response.Command := CargoCompanyTypeDownload;
@@ -696,6 +698,15 @@ begin
         response.Free;
 
         SendData(data, size, Receiver.UniqueID, CargoCompanyID);
+      end
+      else
+      begin
+        Delete(str, 1, cut);
+        if cont then
+          ChatForm(str).Notice('download complete')
+        else
+          ChatForm(str).Notice('download failed');
+        fRequests.Delete(Receiver.UniqueID);
       end;
     end;
   end
@@ -1165,7 +1176,7 @@ begin
   fRequests[uniqueID] := 'SH' + Target;
 end;
 
-procedure TFormMain.FileDownload(Seq: DWord);
+procedure TFormMain.FileDownload(Target: String; Seq: DWord);
 var
   download: String;
   nextpos: Int64;
@@ -1210,7 +1221,9 @@ begin
   cargo.Free;
 
   UniqueID := SendData(data, size, CargoCompanyID);
-  fRequests[UniqueID] := 'DN' + download;
+  fRequests[UniqueID] := 'DN' + download + '|' + Target;
+
+  ChatForm(Target).Notice('download start');
 end;
 
 procedure TFormMain.HashResult(Target, FileName, MD5, SHA256: String);
