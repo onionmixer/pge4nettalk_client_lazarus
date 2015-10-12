@@ -409,6 +409,7 @@ var
   rsa_key: PRSA;
   handshake: array[0..24] of DWord;
   TZBias: Integer;
+  timestamp: Int64;
 
 {$IFDEF WINDOWS}
   TimeZone: TTimeZoneInformation;
@@ -434,10 +435,12 @@ begin
   for i := 0 to 24 do
     handshake[i] := Random($100000000);
 
-  handshake[0] := DateTimeToUnix(IncMinute(Now, TZBias));
-  handshake[1] := fConnectionID;
-  handshake[2] := 0;
-  Move(fEncryptSalt, handshake[3], sizeof(fEncryptSalt));
+  handshake[0] := NToBE(Cardinal(1));
+  timestamp := DateTimeToUnix(IncMinute(Now, TZBias));
+  timestamp := NToBE(timestamp);
+  Move(timestamp, handshake[1], 8);
+  handshake[3] := NToBE(fConnectionID);
+  Move(fEncryptSalt, handshake[4], sizeof(fEncryptSalt));
 
   key_ptr := @key_arr;
   key_len := ExtractRSAKey(key_ptr, Length(key_arr));
@@ -455,8 +458,7 @@ begin
     exit;
   end;
 
-  // FIXME: 6 -> 7
-  AES_set_decrypt_key(@handshake[6], 128, fDecryptKey);
+  AES_set_decrypt_key(@handshake[8], 128, fDecryptKey);
 end;
 
 procedure TTwistedKnotConnection.HandleRead;
@@ -1833,4 +1835,4 @@ begin
   putBytes(PChar(AValue), Len);
 end;
 
-end.
+end.

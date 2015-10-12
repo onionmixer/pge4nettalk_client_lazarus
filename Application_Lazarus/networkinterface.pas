@@ -88,7 +88,7 @@ const
     'LH8N4EzXKJoFuGKdELDUfEZdozHnAOKY2IiFAKjPSAeUL2Rd5tg7hbIwum0JV9yy' +
     'mFz7gnP4jKQjCFunBQIDAQAB';
   ServerHost = 'tknot.steelozcore.net';
-  ServerPort = 4430;
+  ServerPort = 4435;
 
 type
 
