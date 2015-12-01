@@ -42,7 +42,6 @@
       <Unit0>
         <Filename Value="talkto.lpr"/>
         <IsPartOfProject Value="True"/>
-        <UnitName Value="talkto"/>
       </Unit0>
       <Unit1>
         <Filename Value="main.pas"/>
@@ -50,7 +49,6 @@
         <ComponentName Value="FormMain"/>
         <HasResources Value="True"/>
         <ResourceBaseClass Value="Form"/>
-        <UnitName Value="main"/>
       </Unit1>
       <Unit2>
         <Filename Value="chat.pas"/>
@@ -58,7 +56,6 @@
         <ComponentName Value="FormChat"/>
         <HasResources Value="True"/>
         <ResourceBaseClass Value="Form"/>
-        <UnitName Value="chat"/>
       </Unit2>
       <Unit3>
         <Filename Value="login.pas"/>
@@ -66,7 +63,6 @@
         <ComponentName Value="FormLogin"/>
         <HasResources Value="True"/>
         <ResourceBaseClass Value="Form"/>
-        <UnitName Value="login"/>
       </Unit3>
       <Unit4>
         <Filename Value="networkinterface.pas"/>
@@ -79,7 +75,6 @@
         <ComponentName Value="FormFileList"/>
         <HasResources Value="True"/>
         <ResourceBaseClass Value="Form"/>
-        <UnitName Value="filelist"/>
       </Unit5>
       <Unit6>
         <Filename Value="invite.pas"/>
@@ -87,12 +82,10 @@
         <ComponentName Value="FormInvite"/>
         <HasResources Value="True"/>
         <ResourceBaseClass Value="Form"/>
-        <UnitName Value="invite"/>
       </Unit6>
       <Unit7>
         <Filename Value="hash.pas"/>
         <IsPartOfProject Value="True"/>
-        <UnitName Value="hash"/>
       </Unit7>
     </Units>
   </ProjectOptions>
@@ -115,11 +108,7 @@
       </Options>
     </Linking>
     <Other>
-      <CompilerMessages>
-        <MsgFileName Value=""/>
-      </CompilerMessages>
       <CustomOptions Value="-dUseCThreads"/>
-      <CompilerPath Value="$(CompPath)"/>
     </Other>
   </CompilerOptions>
   <Debugging>
@@ -138,4 +127,4 @@
       </Item4>
     </Exceptions>
   </Debugging>
-</CONFIG>
+</CONFIG>

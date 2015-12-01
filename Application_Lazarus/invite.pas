@@ -35,7 +35,7 @@ implementation
 
 {$R *.lfm}
 
-uses main, LCLType, cDataStructs, OZFTalkTo;
+uses main, LCLType, cDataStructs, OZFBlahBlah;
 
 { TFormInvite }
 
@@ -48,9 +48,7 @@ procedure TFormInvite.ButtonInviteClick(Sender: TObject);
 var
   i: Integer;
   user: PtrInt;
-  tt: TTalkTo;
-  data: Pointer;
-  size: DWord;
+  tt: TOZFBlahBlah;
 begin
   if ListBoxUsers.SelCount = 0 then
   begin
@@ -58,8 +56,8 @@ begin
     exit;
   end;
 
-  tt := TTalkTo.Create;
-  tt.functionID := TalkToFunctionIDGroupInvite;
+  tt := TOZFBlahBlah.Create;
+  tt.functionID := OZFBlahBlahFunctionIDGroupInvite;
   tt.args := TStringList.Create;
   tt.args.add(fTargetID);
   for i := 0 to ListBoxUsers.Items.Count - 1 do
@@ -71,10 +69,8 @@ begin
     end;
   end;
 
-  data := tt.getData(size);
+  FormMain.SendData(tt, OZFBlahBlahID);
   FreeAndNil(tt);
-
-  FormMain.SendData(data, size, TalkToID);
 
   Close;
 end;

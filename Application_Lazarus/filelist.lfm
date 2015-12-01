@@ -8,7 +8,7 @@ object FormFileList: TFormFileList
   ClientHeight = 240
   ClientWidth = 327
   OnDropFiles = FormDropFiles
-  LCLVersion = '1.2.6.0'
+  LCLVersion = '1.4.4.0'
   object ListView1: TListView
     Left = 8
     Height = 190

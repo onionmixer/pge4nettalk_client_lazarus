@@ -6,7 +6,7 @@ interface
 
 uses
   Classes, SysUtils, FileUtil, RichView, RVStyle, Forms, Controls, Graphics,
-  Dialogs, ExtCtrls, StdCtrls, ComCtrls, Menus, OZFTalkTo;
+  Dialogs, ExtCtrls, StdCtrls, ComCtrls, Menus, OZFBlahBlah;
 
 type
 
@@ -51,7 +51,7 @@ type
   public
     { public declarations }
     procedure SetUser(from, target: String);
-    procedure RecvMsg(tt: TTalkTo);
+    procedure RecvMsg(tt: TOZFBlahBlah);
     procedure RecvFile(from, filename, mime: String; seq, size, expire: DWord);
     procedure Notice(message: String);
 
@@ -67,32 +67,27 @@ implementation
 
 uses
   main, invite, filelist,
-  LazFileUtils, LazUTF8Classes, LCLType, DateUtils,
-  ChatLabel,
-  CargoCompany;
+  LazFileUtils, LCLType, DateUtils,
+  ChatLabel;
 
 { TFormChat }
 
 procedure TFormChat.ButtonSendClick(Sender: TObject);
 var
   message: String;
-  tt: TTalkTo;
-  size: DWord;
-  data: Pointer;
+  tt: TOZFBlahBlah;
 begin
   message := TrimRight(MemoMessage.Text);
   if message <> '' then
   begin
-    tt := TTalkTo.Create;
-    tt.functionID := TalkToFunctionIDMessage;
+    tt := TOZFBlahBlah.Create;
+    tt.functionID := OZFBlahBlahFunctionIDMessage;
     tt.args := TStringList.Create;
     tt.args.add(fTargetID);
     tt.args.add(message);
 
-    data := tt.getData(size);
+    FormMain.SendData(tt, OZFBlahBlahID);
     FreeAndNil(tt);
-
-    FormMain.SendData(data, size, TalkToID);
 
     MemoMessage.Clear;
   end;
@@ -125,9 +120,7 @@ procedure TFormChat.FormDragDrop(Sender, Source: TObject; X, Y: Integer);
 var
   TreeView: TTreeView;
   User: String;
-  tt: TTalkTo;
-  data: Pointer;
-  size: DWord;
+  tt: TOZFBlahBlah;
 begin
   if not (Source is TTreeView) then exit;
   TreeView := Source as TTreeView;
@@ -147,16 +140,14 @@ begin
 
   if fUsers.IndexOf(User) >= 0 then exit;
 
-  tt := TTalkTo.Create;
-  tt.functionID := TalkToFunctionIDGroupInvite;
+  tt := TOZFBlahBlah.Create;
+  tt.functionID := OZFBlahBlahFunctionIDGroupInvite;
   tt.args := TStringList.Create;
   tt.args.add(fTargetID);
   tt.args.add(User);
 
-  data := tt.getData(size);
+  FormMain.SendData(tt, OZFBlahBlahID);
   FreeAndNil(tt);
-
-  FormMain.SendData(data, size, TalkToID);
 end;
 
 procedure TFormChat.FormDragOver(Sender, Source: TObject; X, Y: Integer;
@@ -312,14 +303,14 @@ begin
   Caption := 'Talk To - ' + FormMain.GetNick(target);
 end;
 
-procedure TFormChat.RecvMsg(tt: TTalkTo);
+procedure TFormChat.RecvMsg(tt: TOZFBlahBlah);
 var
   from, target, message: String;
   i: Integer;
   textAlign: TRVAlign;
   Chat: TChatLabel;
 begin
-  if tt.functionID = TalkToFunctionIDMessage then
+  if tt.functionID = OZFBlahBlahFunctionIDMessage then
   begin
     target := tt.args[0];
     from := tt.args[1];
@@ -359,7 +350,7 @@ begin
     RichView1.Invalidate;
     if not Showing then Show;
   end
-  else if tt.functionID = TalkToFunctionIDGroupInvite then
+  else if tt.functionID = OZFBlahBlahFunctionIDGroupInvite then
   begin
     target := tt.args[0];
     from := tt.args[1];
@@ -381,7 +372,7 @@ begin
     RichView1.Invalidate;
     if not Showing then Show;
   end
-  else if tt.functionID = TalkToFunctionIDGroupExit then
+  else if tt.functionID = OZFBlahBlahFunctionIDGroupExit then
   begin
     target := tt.args[0];
     from := tt.args[1];
@@ -415,9 +406,7 @@ begin
 
   date := UnixToDateTime(expire);
   date := UniversalTimeToLocal(date);
-  ShortDateFormat := 'yy-mm-dd';
-  LongTimeFormat := 'hh:nn';
-  msg := DateTimeToStr(date);
+  msg := FormatDateTime('yy-mm-dd hh:nn', date);
 
   from := FormMain.GetNick(from);
   RichView1.AddTextFromNewLine(from, 0, textAlign);
@@ -441,4 +430,4 @@ begin
 end;
 
 end.
-
+

@@ -40,22 +40,19 @@ implementation
 
 {$R *.lfm}
 
-uses main, chat,
+uses main,
   LCLType, LazFileUtils,
-  TwistedKnot, CargoCompany;
+  OZFCargoCompany;
 
 { TFormFileList }
 
 procedure TFormFileList.ButtonRefreshClick(Sender: TObject);
 var
   cargo: TCargoCompany;
-  data: Pointer;
-  size: DWord;
 begin
   cargo := TCargoCompany.Create;
-  cargo.Command := CargoCompanyTypeList;
-  data := cargo.getData(size);
-  FormMain.SendData(data, size, CargoCompanyID);
+  cargo.Command := OZFCargoCompanyFunctionIDList;
+  FormMain.SendData(cargo, OZFCargoCompanyID);
   cargo.Free;
 end;
 
@@ -143,8 +140,6 @@ end;
 procedure TFormFileList.ButtonDeleteClick(Sender: TObject);
 var
   cargo: TCargoCompany;
-  data: Pointer;
-  size: DWord;
 begin
   if ListView1.SelCount <> 1 then
   begin
@@ -153,11 +148,9 @@ begin
   end;
 
   cargo := TCargoCompany.Create;
-  cargo.Command := CargoCompanyTypeRemove;
+  cargo.Command := OZFCargoCompanyFunctionIDRemove;
   cargo.Seq := StrToInt(ListView1.Selected.SubItems[2]);
-
-  data := cargo.getData(size);
-  FormMain.SendData(data, size, CargoCompanyID);
+  FormMain.SendData(cargo, OZFCargoCompanyID);
   cargo.Free;
 end;
 

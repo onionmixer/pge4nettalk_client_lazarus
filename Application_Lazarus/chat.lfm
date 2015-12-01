@@ -5,7 +5,7 @@ object FormChat: TFormChat
   Width = 419
   AllowDropFiles = True
   Caption = 'FormChat'
-  ClientHeight = 303
+  ClientHeight = 305
   ClientWidth = 419
   Menu = MainMenu1
   OnClose = FormClose
@@ -17,10 +17,10 @@ object FormChat: TFormChat
   OnKeyDown = FormKeyDown
   OnShow = FormShow
   Position = poDefaultPosOnly
-  LCLVersion = '1.2.6.0'
+  LCLVersion = '1.4.4.0'
   object RichView1: TRichView
     Left = 0
-    Height = 234
+    Height = 236
     Top = 0
     Width = 419
     TabStop = True
@@ -48,7 +48,7 @@ object FormChat: TFormChat
     Cursor = crVSplit
     Left = 0
     Height = 5
-    Top = 234
+    Top = 236
     Width = 419
     Align = alBottom
     ResizeAnchor = akBottom
@@ -56,7 +56,7 @@ object FormChat: TFormChat
   object Panel1: TPanel
     Left = 0
     Height = 64
-    Top = 239
+    Top = 241
     Width = 419
     Align = alBottom
     BevelOuter = bvNone
@@ -428,4 +428,4 @@ object FormChat: TFormChat
       end
     end
   end
-end
+end

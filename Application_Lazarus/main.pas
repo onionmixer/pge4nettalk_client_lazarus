@@ -6,8 +6,9 @@ interface
 
 uses
   Classes, SysUtils, FileUtil, Forms, Controls, Graphics, Dialogs, Menus,
-  ComCtrls, StdCtrls, ExtCtrls, Contnrs, syncobjs, LMessages, ChatLabel,
-  NetworkInterface, TwistedKnot, chat, cDataStructs, hash;
+  ComCtrls, StdCtrls, ExtCtrls, Contnrs, syncobjs, LMessages,
+  ChatLabel, OZFTwistedKnot, OZFTwistedKnotStream, OZFTwistedKnotPacket,
+  cDataStructs, NetworkInterface, chat, hash;
 
 type
 
@@ -36,7 +37,7 @@ type
     { private declarations }
     fConfigFile: String;
     fNetwork: TNetworkInterface;
-    fNetworkStatus: TTwistedKnotStatus;
+    fNetworkStatus: TOZFTwistedKnotStatus;
     fAuth: Boolean;
     fUser: String;
     fUploadID, fUploadAddress, fUploadStreamID:DWord;
@@ -60,9 +61,9 @@ type
 
     procedure OnNetworkEvent(var Msg: TLMessage); message NI_EVENT;
     procedure OnStatus(var Msg: TLMessage); message NI_STATUS;
-    procedure OnTalkTo(Receiver: TTwistedKnotReceiver);
-    procedure OnSession(Receiver: TTwistedKnotReceiver);
-    procedure OnCargoCompany(Receiver: TTwistedKnotReceiver);
+    procedure OnTalkTo(Receiver: TOZFTwistedKnotStream);
+    procedure OnSession(Receiver: TOZFTwistedKnotStream);
+    procedure OnCargoCompany(Receiver: TOZFTwistedKnotStream);
     procedure UpdateUserInfo(User, Nick, Group, Status, Image: String);
     procedure ChatCloseAll;
     function GetConnected: Boolean;
@@ -73,8 +74,8 @@ type
     procedure Join(Room: String; User:String);
     function ChatForm(User: String; Add: Boolean = True): TFormChat;
     procedure ChatClose(User: String);
-    function SendData(data: Pointer; size, toAddress: DWord):DWord;
-    procedure SendData(data: Pointer; size, uniqueID, toAddress: DWord);
+    function SendData(packet: TOZFTwistedKnotPacket; toAddress: DWord):DWord;
+    procedure SendData(packet: TOZFTwistedKnotPacket; uniqueID, toAddress: DWord);
     function GetNick(User: String): String;
     procedure AddUpload(Target, FileName: String);
     procedure FileShare(Target, FileSeq: String);
@@ -99,7 +100,7 @@ implementation
 uses
   login, filelist,
   LCLType, IniFiles, DateUtils, LazFileUtils, LazUTF8Classes, cHash,
-  OZFTalkTo, Session, CargoCompany;
+  OZFBlahBlah, OZFMinions, OZFCargoCompany;
 
 { TFormMain }
 
@@ -177,20 +178,16 @@ end;
 
 procedure TFormMain.FormDestroy(Sender: TObject);
 var
-  tt: TTalkTo;
-  size: DWord;
-  data: Pointer;
+  tt: TOZFBlahBlah;
   i: Integer;
   Chat: TFormChat;
 begin
   fHashThread.Terminate;
 
-  tt := TTalkTo.Create;
-  tt.functionID := TalkToFunctionIDQuit;
-
-  data := tt.getData(size);
+  tt := TOZFBlahBlah.Create;
+  tt.functionID := OZFBlahBlahFunctionIDQuit;
+  SendData(tt, OZFBlahBlahID);
   tt.Free;
-  SendData(data, size, TalkToID);
 
   fNetwork.Free;
 
@@ -218,18 +215,14 @@ end;
 
 procedure TFormMain.MenuConnectClick(Sender: TObject);
 var
-  tt: TTalkTo;
-  size: DWord;
-  data: Pointer;
+  tt: TOZFBlahBlah;
 begin
   if fAuth then
   begin
-    tt := TTalkTo.Create;
-    tt.functionID := TalkToFunctionIDQuit;
-
-    data := tt.getData(size);
+    tt := TOZFBlahBlah.Create;
+    tt.functionID := OZFBlahBlahFunctionIDQuit;
+    SendData(tt, OZFBlahBlahID);
     tt.Free;
-    SendData(data, size, TalkToID);
   end
   else
   begin
@@ -254,8 +247,6 @@ procedure TFormMain.StatusBar1Click(Sender: TObject);
 var
   seq: DWord;
   cargo: TCargoCompany;
-  data: Pointer;
-  size: DWord;
 begin
   if fUploadID = 0 then
     exit;
@@ -266,20 +257,16 @@ begin
     exit;
 
   cargo := TCargoCompany.Create;
-  cargo.Command := CargoCompanyTypeCancel;
+  cargo.Command := OZFCargoCompanyFunctionIDCancel;
   cargo.Seq := seq;
-
-  data := cargo.getData(size);
+  SendData(cargo, OZFCargoCompanyID);
   cargo.Free;
-
-  SendData(data, size, CargoCompanyID);
 end;
 
 procedure TFormMain.Timer1Timer(Sender: TObject);
 const
   units: array[0..4] of String = ('B', 'KB', 'MB', 'GB', 'TB');
 var
-  item: TTwistedKnotSender;
   sent, total: Double;
   result: String;
   i: Integer;
@@ -337,15 +324,14 @@ var
 begin
   if TreeView1.Selected = nil then exit;
   User := IntToStr(PtrInt(TreeView1.Selected.Data));
-  if User = fUser then exit;
+  //if User = fUser then exit;
   ChatForm(User).Show;
 end;
 
 procedure TFormMain.OnNetworkEvent(var Msg: TLMessage);
 var
   Event: TNetworkEvent;
-  Sender: TTwistedKnotSender;
-  Receiver: TTwistedKnotReceiver;
+  Stream: TOZFTwistedKnotStream;
 begin
   while true do
   begin
@@ -358,25 +344,25 @@ begin
       if Event.Status <> NetworkInterfaceReceiveComplete then
         continue;
 
-      Receiver := Event.Stream as TTwistedKnotReceiver;
+      Stream := Event.Stream;
 
-      if Receiver = nil then
+      if Stream = nil then
         break;
 
-      if Receiver.Length < 2 then
+      if Stream.Length < 2 then
       begin
-        Receiver.Free;
+        Stream.Free;
         continue;
       end;
 
-      if Receiver.Address = SessionID then
-        OnSession(Receiver)
-      else if Receiver.Address = TalkToID then
-        OnTalkTo(Receiver)
-      else if Receiver.Address = CargoCompanyID then
-        OnCargoCompany(Receiver);
+      if Stream.Address = OZFMinionsID then
+        OnSession(Stream)
+      else if Stream.Address = OZFBlahBlahID then
+        OnTalkTo(Stream)
+      else if Stream.Address = OZFCargoCompanyID then
+        OnCargoCompany(Stream);
 
-      Receiver.Free;
+      Stream.Free;
     end
     else
     begin
@@ -389,8 +375,8 @@ begin
       if Event.Status <> NetworkInterfaceSendComplete then
         continue;
 
-      Sender := Event.Stream as TTwistedKnotSender;
-      Sender.Free;
+      if Event.Stream <> nil then
+        Event.Stream.Free;
 
       fUploadAddress := 0;
       fUploadStreamID := 0;
@@ -400,18 +386,18 @@ begin
   end;
 end;
 
-procedure TFormMain.OnTalkTo(Receiver: TTwistedKnotReceiver);
+procedure TFormMain.OnTalkTo(Receiver: TOZFTwistedKnotStream);
 var
-  tt: TTalkTo;
+  tt: TOZFBlahBlah;
   user, room, nick, group, status, image, seq: String;
   form: TFormChat;
   cargo: TCargoCompany;
-  data: Pointer;
-  size, uniqueID: DWord;
+  uniqueID: DWord;
+  date: TDateTime;
   Config: TIniFile;
 begin
-  tt := TTalkTo.Create(Receiver.Buffer, Receiver.Length);
-  if tt.functionID = TalkToFunctionIDQuit then
+  tt := TOZFBlahBlah.Create(Receiver.Buffer, Receiver.Length);
+  if tt.functionID = OZFBlahBlahFunctionIDQuit then
   begin
     if fAuth then
     begin
@@ -429,7 +415,7 @@ begin
       FormLogin.Fail;
     end;
   end
-  else if tt.functionID = TalkToFunctionIDAuth then
+  else if tt.functionID = OZFBlahBlahFunctionIDAuth then
   begin
     fAuth := True;
     fUser := tt.args[0];
@@ -437,16 +423,14 @@ begin
     MenuFileList.Enabled := True;
     FormLogin.Hide;
     FormFileList.ButtonRefreshClick(nil);
-
-    ShortDateFormat := 'yy-mm-dd';
-    LongTimeFormat := 'hh:nn:ss';
+    date := Now;
 
     Config := TIniFile.Create(fConfigFile);
-    Config.WriteString('Login', 'Date', DateToStr(Now));
-    Config.WriteString('Login', 'Time', TimeToStr(Now));
+    Config.WriteString('Login', 'Date', FormatDateTime('yy-mm-dd', date));
+    Config.WriteString('Login', 'Time', FormatDateTime('hh:nn:ss', date));
     Config.Free;
   end
-  else if tt.functionID = TalkToFunctionIDStat then
+  else if tt.functionID = OZFBlahBlahFunctionIDStat then
   begin
     user := tt.args[0];
     nick := tt.args[1];
@@ -461,20 +445,20 @@ begin
     if user = fUser then
       Caption := 'Talk To - ' + nick;
   end
-  else if tt.functionID = TalkToFunctionIDMessage then
+  else if tt.functionID = OZFBlahBlahFunctionIDMessage then
   begin
     user := tt.args[0];
     if user = fUser then
       user := tt.args[1];
     ChatForm(user).RecvMsg(tt);
   end
-  else if tt.functionID = TalkToFunctionIDGroupJoin then
+  else if tt.functionID = OZFBlahBlahFunctionIDGroupJoin then
   begin
     room := tt.args[0];
     user := tt.args[1];
     Join(room, user);
   end
-  else if tt.functionID = TalkToFunctionIDGroupInvite then
+  else if tt.functionID = OZFBlahBlahFunctionIDGroupInvite then
   begin
     room := tt.args[0];
     user := tt.args[1];
@@ -491,7 +475,7 @@ begin
       end;
     end;
   end
-  else if tt.functionID = TalkToFunctionIDGroupExit then
+  else if tt.functionID = OZFBlahBlahFunctionIDGroupExit then
   begin
     room := tt.args[0];
     user := tt.args[1];
@@ -503,44 +487,38 @@ begin
         form.Free;
     end;
   end
-  else if tt.functionID = TalkToFunctionIDFileShare then
+  else if tt.functionID = OZFBlahBlahFunctionIDFileShare then
   begin
     room := tt.args[0];
     user := tt.args[1];
     seq := tt.args[2];
 
     cargo := TCargoCompany.Create;
-    cargo.Command := CargoCompanyTypeStat;
+    cargo.Command := OZFCargoCompanyFunctionIDStat;
     cargo.Seq := StrToInt(seq);
-
-    data := cargo.getData(size);
+    uniqueID := SendData(cargo, OZFCargoCompanyID);
     cargo.Free;
 
-    uniqueID := SendData(data, size, CargoCompanyID);
     fRequests[uniqueID] := 'FI' + room + '|' + user;
   end;
   if Assigned(tt) then
     FreeAndNil(tt);
 end;
 
-procedure TFormMain.OnSession(Receiver: TTwistedKnotReceiver);
+procedure TFormMain.OnSession(Receiver: TOZFTwistedKnotStream);
 var
-  response: TSession;
-  tt: TTalkTo;
-  size: DWord;
-  data: Pointer;
+  response: TOZFMinions;
+  tt: TOZFBlahBlah;
 begin
-  response := TSession.Create(Receiver.Buffer, Receiver.Length);
-  if response.functionID = SessionFunctionIDSignIn then
+  response := TOZFMinions.Create(Receiver.Buffer, Receiver.Length);
+  if response.functionID = OZFMinionsFunctionIDResponse then
   begin
-    if response.errorCode = SessionErrorCodeNone then
+    if response.errorCode = OZFMinionsErrorCodeNone then
     begin
-      tt := TTalkTo.Create;
-      tt.functionID := TalkToFunctionIDAuth;
-
-      data := tt.getData(size);
+      tt := TOZFBlahBlah.Create;
+      tt.functionID := OZFBlahBlahFunctionIDAuth;
+      SendData(tt, OZFBlahBlahID);
       tt.Free;
-      SendData(data, size, TalkToID);
     end
     else
     begin
@@ -550,9 +528,9 @@ begin
   end;
 end;
 
-procedure TFormMain.OnCargoCompany(Receiver: TTwistedKnotReceiver);
+procedure TFormMain.OnCargoCompany(Receiver: TOZFTwistedKnotStream);
 var
-  tt: TTalkTo;
+  tt: TOZFBlahBlah;
   cargo, response: TCargoCompany;
   fsIn: TFileStreamUTF8;
   fsOut: TFileStreamUTF8;
@@ -569,8 +547,8 @@ begin
 
   if cargo.ErrorCode <> 0 then
   begin
-    if (cargo.Command = CargoCompanyTypeResult) And
-      (cargo.ResultType = CargoCompanyTypeUpload) then
+    if (cargo.Command = OZFCargoCompanyFunctionIDResult) And
+      (cargo.ResultType = OZFCargoCompanyFunctionIDUpload) then
     begin
       fUploadID := 0;
       FileUpload;
@@ -583,7 +561,7 @@ begin
 
     Application.MessageBox(PChar(str), 'Cargo Company Error', 0);
   end
-  else if cargo.Command = CargoCompanyTypeUpload then
+  else if cargo.Command = OZFCargoCompanyFunctionIDUpload then
   begin
     if fRequests.HasItem(Receiver.UniqueID) then
     begin
@@ -632,21 +610,19 @@ begin
       if data <> nil then
       begin
         response := TCargoCompany.Create;
-        response.Command := CargoCompanyTypeTransfer;
+        response.Command := OZFCargoCompanyFunctionIDTransfer;
         response.Seq := cargo.Seq;
         response.Position := cargo.Position;
         response.Content := data;
         response.ContentSize := size;
-
-        data := response.getData(size);
+        SendData(response, Receiver.UniqueID, OZFCargoCompanyID);
         response.Free;
 
-        SendData(data, size, Receiver.UniqueID, CargoCompanyID);
         fUploadPos := cargo.Position;
       end;
     end;
   end
-  else if cargo.Command = CargoCompanyTypeTransfer then
+  else if cargo.Command = OZFCargoCompanyFunctionIDTransfer then
   begin
     if fRequests.HasItem(Receiver.UniqueID) then
     begin
@@ -690,14 +666,11 @@ begin
       if cont and (fFileSizes[cargo.Seq] > nextpos) then
       begin
         response := TCargoCompany.Create;
-        response.Command := CargoCompanyTypeDownload;
+        response.Command := OZFCargoCompanyFunctionIDDownload;
         response.Seq := cargo.Seq;
         response.Position := nextpos;
-
-        data := response.getData(size);
+        SendData(response, Receiver.UniqueID, OZFCargoCompanyID);
         response.Free;
-
-        SendData(data, size, Receiver.UniqueID, CargoCompanyID);
       end
       else
       begin
@@ -710,8 +683,8 @@ begin
       end;
     end;
   end
-  else if (cargo.Command = CargoCompanyTypeResult) And
-    (cargo.ResultType = CargoCompanyTypeUpload) then
+  else if (cargo.Command = OZFCargoCompanyFunctionIDResult) And
+    (cargo.ResultType = OZFCargoCompanyFunctionIDUpload) then
   begin
     list := FormFileList.ListView1;
     list.BeginUpdate;
@@ -721,9 +694,7 @@ begin
     sizestr := IntToStr(cargo.Size);
     date := UnixToDateTime(cargo.Expire);
     date := UniversalTimeToLocal(date);
-    ShortDateFormat := 'yy-mm-dd';
-    LongTimeFormat := 'hh:nn';
-    expire := DateTimeToStr(date);
+    expire := FormatDateTime('yy-mm-dd hh:nn', date);
     mime := cargo.Mime;
 
     item := list.Items.FindCaption(0, filename, False, True, False);
@@ -763,14 +734,14 @@ begin
     fUploadID := 0;
     FileUpload;
   end
-  else if (cargo.Command = CargoCompanyTypeResult) And
-    (cargo.ResultType = CargoCompanyTypeCancel) then
+  else if (cargo.Command = OZFCargoCompanyFunctionIDResult) And
+    (cargo.ResultType = OZFCargoCompanyFunctionIDCancel) then
   begin
     fUploadID := 0;
     FileUpload;
   end
-  else if (cargo.Command = CargoCompanyTypeResult) And
-    (cargo.ResultType = CargoCompanyTypeStat) then
+  else if (cargo.Command = OZFCargoCompanyFunctionIDResult) And
+    (cargo.ResultType = OZFCargoCompanyFunctionIDStat) then
   begin
     if fRequests.HasItem(Receiver.UniqueID) then
     begin
@@ -792,7 +763,7 @@ begin
       end;
     end;
   end
-  else if cargo.Command = CargoCompanyTypeRemove then
+  else if cargo.Command = OZFCargoCompanyFunctionIDRemove then
   begin
     list := FormFileList.ListView1;
     list.BeginUpdate;
@@ -809,7 +780,7 @@ begin
 
     list.EndUpdate;
   end
-  else if cargo.Command = CargoCompanyTypeShare then
+  else if cargo.Command = OZFCargoCompanyFunctionIDShare then
   begin
     user := '';
     if fRequests.HasItem(Receiver.UniqueID) then
@@ -823,20 +794,17 @@ begin
     end;
     if user <> '' then
     begin
-      tt := TTalkTo.Create;
+      tt := TOZFBlahBlah.Create;
 
-      tt.functionID := TalkToFunctionIDFileShare;
+      tt.functionID := OZFBlahBlahFunctionIDFileShare;
       tt.args := TStringList.Create;
       tt.args.Add(user);
       tt.args.Add(IntToStr(cargo.Seq));
-
-      data := tt.getData(size);
+      SendData(tt, OZFBlahBlahID);
       FreeAndNil(tt);
-
-      SendData(data, size, TalkToID);
     end;
   end
-  else if cargo.Command = CargoCompanyTypeList then
+  else if cargo.Command = OZFCargoCompanyFunctionIDList then
   begin
     list := FormFileList.ListView1;
     list.BeginUpdate;
@@ -850,9 +818,7 @@ begin
       expire := cargo.Args[i * 5 + 4];
       date := UnixToDateTime(StrToInt(expire));
       date := UniversalTimeToLocal(date);
-      ShortDateFormat := 'yy-mm-dd';
-      LongTimeFormat := 'hh:nn';
-      expire := DateTimeToStr(date);
+      expire := FormatDateTime('yy-mm-dd hh:nn', date);
 
       item := list.Items.FindCaption(0, filename, False, True, False);
       if item = nil then
@@ -889,7 +855,7 @@ end;
 
 procedure TFormMain.OnStatus(var Msg: TLMessage);
 begin
-  fNetworkStatus := TTwistedKnotStatus(Msg.WParam);
+  fNetworkStatus := TOZFTwistedKnotStatus(Msg.WParam);
 
   if fNetworkStatus = TwistedKnotStatusDisconnect then
     StatusBar1.Panels[0].Text := 'Disconnected'
@@ -946,21 +912,15 @@ end;
 
 procedure TFormMain.SignIn(User: String; Password: String);
 var
-  request: TSession;
-  data: Pointer;
-  size: DWord;
+  request: TOZFMinions;
 begin
-  request := TSession.Create;
-  request.functionID := SessionFunctionIDSignIn;
-  request.errorCode := SessionErrorCodeNone;
-  request.args := TStringList.Create;
-  request.args.Add(User);
-  request.args.Add(Password);
-  request.args.Add('user');
-
-  data := request.getData(size);
-  fNetwork.send(data, size, fNetwork.getUniqueID, SessionID);
-
+  request := TOZFMinions.Create;
+  request.functionID := OZFMinionsFunctionIDSignIn;
+  request.errorCode := OZFMinionsErrorCodeNone;
+  request.identifier := User;
+  request.Password := Password;
+  request.useNickname := False;
+  SendData(request, OZFMinionsID);
   request.Free;
 end;
 
@@ -1144,15 +1104,14 @@ end;
 procedure TFormMain.FileShare(Target, FileSeq: String);
 var
   cargo: TCargoCompany;
-  data: Pointer;
-  size, uniqueID: DWord;
   form: TFormChat;
+  uniqueID: DWord;
 begin
   if Target = '' then
     exit;
 
   cargo := TCargoCompany.Create;
-  cargo.Command := CargoCompanyTypeShare;
+  cargo.Command := OZFCargoCompanyFunctionIDShare;
   cargo.Seq := StrToInt(FileSeq);
   if Target[1] = '#' then
   begin
@@ -1169,10 +1128,9 @@ begin
     cargo.Args.Add(Target);
   end;
 
-  data := cargo.getData(size);
+  uniqueID := SendData(cargo, OZFCargoCompanyID);
   cargo.Free;
 
-  uniqueID := SendData(data, size, CargoCompanyID);
   fRequests[uniqueID] := 'SH' + Target;
 end;
 
@@ -1181,8 +1139,7 @@ var
   download: String;
   nextpos: Int64;
   cargo: TCargoCompany;
-  data: Pointer;
-  size, UniqueID: DWord;
+  uniqueID: DWord;
 begin
   if not fFileNames.HasItem(Seq) then
   begin
@@ -1213,14 +1170,13 @@ begin
   end;
 
   cargo := TCargoCompany.Create;
-  cargo.Command := CargoCompanyTypeDownload;
+  cargo.Command := OZFCargoCompanyFunctionIDDownload;
   cargo.Seq := Seq;
   cargo.Position := nextpos;
 
-  data := cargo.getData(size);
+  UniqueID := SendData(cargo, OZFCargoCompanyID);
   cargo.Free;
 
-  UniqueID := SendData(data, size, CargoCompanyID);
   fRequests[UniqueID] := 'DN' + download + '|' + Target;
 
   ChatForm(Target).Notice('download start');
@@ -1241,15 +1197,16 @@ begin
     FileUpload;
 end;
 
-function TFormMain.SendData(data: Pointer; size, toAddress: DWord): DWord;
+function TFormMain.SendData(packet: TOZFTwistedKnotPacket; toAddress: DWord): DWord;
 begin
   Result := fNetwork.getUniqueID;
-  fNetwork.send(data, size, Result, toAddress);
+  SendData(packet, Result, toAddress);
 end;
 
-procedure TFormMain.SendData(data: Pointer; size, uniqueID, toAddress: DWord);
+procedure TFormMain.SendData(packet: TOZFTwistedKnotPacket; uniqueID, toAddress: DWord);
 begin
-  fNetwork.send(data, size, uniqueID, toAddress);
+  packet.setup;
+  fNetwork.send(packet.Packet, packet.PacketSize, uniqueID, toAddress);
 end;
 
 function TFormMain.GetConnected: Boolean;
@@ -1263,8 +1220,6 @@ var
   cut: Integer;
   filesize: Int64;
   cargo: TCargoCompany;
-  size: DWord;
-  data: Pointer;
   uniqueID: DWord;
   md5: String;
   sha256: String;
@@ -1309,16 +1264,15 @@ begin
     filesize := FileSizeUTF8(upload);
 
     cargo := TCargoCompany.Create;
-    cargo.Command := CargoCompanyTypeUploadRequest;
+    cargo.Command := OZFCargoCompanyFunctionIDUploadRequest;
     cargo.Name := ExtractFileName(upload);
     cargo.Size := filesize;
     cargo.MD5 := md5;
     cargo.SHA256 := sha256;
 
-    data := cargo.getData(size);
+    uniqueID :=  SendData(cargo, OZFCargoCompanyID);
     cargo.Free;
 
-    uniqueID :=  SendData(data, size, CargoCompanyID);
     fRequests[uniqueID] := 'UP' + upload + '|' + user;
 
     fUploadID := uniqueID;
@@ -1332,4 +1286,4 @@ begin
 end;
 
 end.
-
+

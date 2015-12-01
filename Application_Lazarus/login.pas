@@ -37,7 +37,7 @@ implementation
 
 {$R *.lfm}
 
-uses main, IniFiles, OZFTalkTo;
+uses main, IniFiles;
 
 { TFormLogin }
 
@@ -105,4 +105,4 @@ begin
 end;
 
 end.
-
+

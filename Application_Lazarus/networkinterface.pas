@@ -5,7 +5,8 @@ unit NetworkInterface;
 interface
 
 uses
-  Classes, SysUtils, syncobjs, Contnrs, TwistedKnot, LCLIntf, LMessages;
+  Classes, SysUtils, syncobjs, Contnrs, LCLIntf, LMessages,
+  OZFTwistedKnot, OZFTwistedKnotStream;
 
 const
   NI_EVENT = LM_USER + 101;
@@ -26,10 +27,10 @@ type
     fAddress: DWord;
     fUniqueID: DWord;
     fStreamID: DWord;
-    fStream: TTwistedKnotStream;
+    fStream: TOZFTwistedKnotStream;
   public
     constructor Create(Status: Integer; Address, UniqueID, StreamID: DWord);
-    constructor Create(Status: Integer; Stream: TTwistedKnotStream);
+    constructor Create(Status: Integer; Stream: TOZFTwistedKnotStream);
     destructor Destroy; override;
 
     property Status: Integer read fStatus;
@@ -37,14 +38,14 @@ type
     property Address: DWord read fAddress;
     property UniqueID: DWord read fUniqueID;
     property StreamID: Dword read fStreamID;
-    property Stream: TTwistedKnotStream read fStream;
+    property Stream: TOZFTwistedKnotStream read fStream;
   end;
 
   { TNetworkInterface }
 
-  TNetworkInterface = class(TTwistedKnot)
+  TNetworkInterface = class(TOZFTwistedKnotDelegate)
   private
-    fConnection: TTwistedKnotConnection;
+    fConnection: TOZFTwistedKnot;
     fKeepAlive: TThread;
     fLastUniqueID: DWord;
     fSection: TCriticalSection;
@@ -66,12 +67,12 @@ type
 
     function getUniqueID:DWord;
 
-    procedure notify(Status: TTwistedKnotStatus); override;
+    procedure notify(Status: TOZFTwistedKnotStatus); override;
     procedure sendStart(Address, UniqueID, StreamID: DWord); override;
-    procedure sendCompleted(Sender: TTwistedKnotSender); override;
+    procedure sendCompleted(Sender: TOZFTwistedKnotStream); override;
     function canReceive(Address, UniqueID, Length: Cardinal): Boolean; override;
     procedure receiveStart(Address, UniqueID, StreamID: DWord); override;
-    procedure receiveCompleted(Receiver: TTwistedKnotReceiver); override;
+    procedure receiveCompleted(Receiver: TOZFTwistedKnotStream); override;
 
     property Connected: Boolean read getConnected;
   end;
@@ -96,13 +97,13 @@ type
 
   TKeepAliveThread = class(TThread)
   private
-    fConnection: TTwistedKnotConnection;
+    fConnection: TOZFTwistedKnot;
   protected
     procedure Execute; override;
   public
     constructor Create;
 
-    property Connection: TTwistedKnotConnection write fConnection;
+    property Connection: TOZFTwistedKnot write fConnection;
   end;
 
 { TNetworkEvent }
@@ -121,7 +122,7 @@ begin
   fReceive := (fStatus >= NetworkInterfaceReceiveStart);
 end;
 
-constructor TNetworkEvent.Create(Status: Integer; Stream: TTwistedKnotStream);
+constructor TNetworkEvent.Create(Status: Integer; Stream: TOZFTwistedKnotStream);
 begin
   inherited Create;
 
@@ -181,7 +182,7 @@ begin
   fEventList := TObjectList.Create(False);
   fStatus := TStringList.Create;
 
-  fConnection := TTwistedKnotConnection.Create;
+  fConnection := TOZFTwistedKnot.Create;
   fConnection.PublicKey := PublicKey;
   fConnection.Address := ServerHost;
   fConnection.Port := ServerPort;
@@ -264,7 +265,7 @@ begin
   fSection.Release;
 end;
 
-procedure TNetworkInterface.notify(Status: TTwistedKnotStatus);
+procedure TNetworkInterface.notify(Status: TOZFTwistedKnotStatus);
 begin
   PostMessage(FormMain.Handle, NI_STATUS, Ord(Status), 0);
 end;
@@ -280,7 +281,7 @@ begin
   PostMessage(FormMain.Handle, NI_EVENT, 0, 0);
 end;
 
-procedure TNetworkInterface.sendCompleted(Sender: TTwistedKnotSender);
+procedure TNetworkInterface.sendCompleted(Sender: TOZFTwistedKnotStream);
 var
   event: TNetworkEvent;
 begin
@@ -308,7 +309,7 @@ begin
   PostMessage(FormMain.Handle, NI_EVENT, 0, 0);
 end;
 
-procedure TNetworkInterface.receiveCompleted(Receiver: TTwistedKnotReceiver);
+procedure TNetworkInterface.receiveCompleted(Receiver: TOZFTwistedKnotStream);
 var
   event: TNetworkEvent;
 begin
