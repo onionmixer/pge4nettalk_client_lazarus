@@ -2,18 +2,13 @@
 .gitattributes
 
 # lazarus
-Application_Lazarus/talkto
-Application_Lazarus/*.exe
-Application_Lazarus/*.app/
-Application_Lazarus/*.lps
-Application_Lazarus/*.res
-Application_Lazarus/*.dll
-Application_Lazarus/lib/
+*_lazarus*
+!*.ico
+!*.lpr
+!*.lpi
+*.dll
+lib/
 backup/
-
-# Doxygen
-Doxgen/*
-!Doxgen/*.doxyconf
 
 # Xcode
 .DS_Store
