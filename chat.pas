@@ -6,7 +6,7 @@ interface
 
 uses
   Classes, SysUtils, FileUtil, RichView, RVStyle, Forms, Controls, Graphics,
-  Dialogs, ExtCtrls, StdCtrls, ComCtrls, Menus, OZFBlahBlah;
+  Dialogs, ExtCtrls, StdCtrls, ComCtrls, Menus, RegExpr, SyncObjs, OZFBlahBlah;
 
 type
 
@@ -14,6 +14,7 @@ type
 
   TFormChat = class(TForm)
     ButtonSend: TButton;
+    Image1: TImage;
     ImageList1: TImageList;
     MainMenu1: TMainMenu;
     MemoMessage: TMemo;
@@ -22,7 +23,9 @@ type
     MenuInvite: TMenuItem;
     MenuShare: TMenuItem;
     Panel1: TPanel;
+    Panel2: TPanel;
     Splitter1: TSplitter;
+    Timer1: TTimer;
     procedure ButtonSendClick(Sender: TObject);
     procedure FormClose(Sender: TObject; var CloseAction: TCloseAction);
     procedure FormCreate(Sender: TObject);
@@ -41,6 +44,7 @@ type
     procedure RichView1Jump(Sender: TObject; id: Integer);
     procedure RichView1KeyDown(Sender: TObject; var Key: Word;
       Shift: TShiftState);
+    procedure Timer1Timer(Sender: TObject);
   private
     { private declarations }
     fFromID: String;
@@ -49,6 +53,11 @@ type
     fJumpSeq: TStringList;
     fRichView: TRichView;
     fRVStyle: TRVStyle;
+    fPopupRegExpr: TRegExpr;
+    fPopupList: TStringList;
+    fPopupLock: SyncObjs.TCriticalSection;
+
+    procedure showPopup(filename: String);
   public
     { public declarations }
     procedure SetUser(from, target: String);
@@ -122,6 +131,9 @@ begin
   fTargetID := '';
   fJumpSeq := TStringList.Create;
   fUsers := nil;
+  fPopupRegExpr := TRegExpr.Create('(apple|banana)');
+  fPopupList := TStringList.Create;
+  fPopupLock := SyncObjs.TCriticalSection.Create;
 end;
 
 procedure TFormChat.FormDestroy(Sender: TObject);
@@ -130,6 +142,12 @@ begin
     FreeAndNil(fJumpSeq);
   if Assigned(fUsers) then
     FreeAndNil(fUsers);
+  if Assigned(fPopupRegExpr) then
+    FreeAndNil(fPopupRegExpr);
+  if Assigned(fPopupList) then
+    FreeAndNil(fPopupList);
+  if Assigned(fPopupLock) then
+    FreeAndNil(fPopupLock);
   FormMain.ChatClose(fTargetID);
 end;
 
@@ -308,6 +326,55 @@ begin
     FormKeyDown(Sender, Key, Shift);
 end;
 
+procedure TFormChat.Timer1Timer(Sender: TObject);
+var
+  filename: String;
+begin
+  if Panel2.Visible then
+  begin
+    Panel2.Visible := False;
+    Timer1.Interval := 100;
+    exit;
+  end;
+
+  Timer1.Enabled := False;
+
+  fPopupLock.Enter;
+  if fPopupList.Count = 0 then
+  begin
+    fPopupLock.Leave;
+    exit;
+  end;
+  filename := fPopupList[0];
+  fPopupList.Delete(0);
+  fPopupLock.Leave;
+
+  Image1.Picture.LoadFromFile(filename);
+  Panel2.Visible := True;
+  Timer1.Interval := 1000;
+  Timer1.Enabled := True;
+end;
+
+procedure TFormChat.showPopup(filename: String);
+begin
+  if not FileExists(filename) then
+    exit;
+
+  if Timer1.Enabled then
+  begin
+    fPopupLock.Enter;
+    fPopupList.Add(filename);
+    fPopupLock.Leave;
+  end
+  else
+  begin
+    Image1.Picture.LoadFromFile(filename);
+    Panel2.Visible := True;
+    Timer1.Interval := 1000;
+    Timer1.Enabled := True;
+  end;
+end;
+
 procedure TFormChat.SetUser(from, target: String);
 begin
   if (target[1] = '#') and not Assigned(fUsers) then
@@ -331,6 +398,7 @@ var
   i: Integer;
   textAlign: TRVAlign;
   Chat: TChatLabel;
+  match: String;
 begin
   if tt.functionID = OZFBlahBlahFunctionIDMessage then
   begin
@@ -371,6 +439,13 @@ begin
     fRichView.FormatTail;
     fRichView.Invalidate;
     if not Showing then Show;
+
+    if fPopupRegExpr.Exec(message) then
+    begin
+      match := fPopupRegExpr.Match[0];
+      if match = 'apple' then showPopup('sample_image_apple.jpg');
+      if match = 'banana' then showPopup('sample_image_banana.jpg');
+    end;
   end
   else if tt.functionID = OZFBlahBlahFunctionIDGroupInvite then
   begin

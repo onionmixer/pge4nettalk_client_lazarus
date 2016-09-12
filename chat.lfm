@@ -64,6 +64,27 @@ object FormChat: TFormChat
       TabOrder = 1
     end
   end
+  object Panel2: TPanel
+    Left = 56
+    Height = 200
+    Top = 56
+    Width = 304
+    Anchors = [akTop, akLeft, akRight, akBottom]
+    BevelOuter = bvNone
+    ClientHeight = 200
+    ClientWidth = 304
+    TabOrder = 2
+    UseDockManager = False
+    Visible = False
+    object Image1: TImage
+      Left = 0
+      Height = 200
+      Top = 0
+      Width = 304
+      Align = alClient
+      Stretch = True
+    end
+  end
   object ImageList1: TImageList
     Height = 32
     Width = 32
@@ -347,5 +368,11 @@ object FormChat: TFormChat
         OnClick = MenuCloseClick
       end
     end
+  end
+  object Timer1: TTimer
+    Enabled = False
+    OnTimer = Timer1Timer
+    left = 344
+    top = 68
   end
 end
