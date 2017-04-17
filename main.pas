@@ -258,7 +258,7 @@ begin
 
   cargo := TOZFCargoCompany.Create;
   cargo.Command := OZFCargoCompanyFunctionIDCancel;
-  cargo.Seq := seq;
+  cargo.FileSeq := seq;
   SendData(cargo, OZFCargoCompanyID);
   cargo.Free;
 end;
@@ -495,7 +495,7 @@ begin
 
     cargo := TOZFCargoCompany.Create;
     cargo.Command := OZFCargoCompanyFunctionIDStat;
-    cargo.Seq := StrToInt(seq);
+    cargo.FileSeq := StrToInt(seq);
     uniqueID := SendData(cargo, OZFCargoCompanyID);
     cargo.Free;
 
@@ -539,6 +539,8 @@ var
   i, cut: Integer;
   read, size, nextpos: DWord;
   data: Pointer;
+  fileInfo: TOZFCargoCompanyFileInfo;
+  files: TStrings;
   str, seq, filename, sizestr, mime, expire, user: String;
   date: TDateTime;
   cont: Boolean;
@@ -568,7 +570,7 @@ begin
       str := fRequests[Receiver.UniqueID];
       cut := Pos('|', str);
       filename := Copy(str, 3, cut - 3);
-      fUploadSeq := cargo.seq;
+      fUploadSeq := cargo.FileSeq;
 
       data := nil;
 
@@ -611,7 +613,7 @@ begin
       begin
         response := TOZFCargoCompany.Create;
         response.Command := OZFCargoCompanyFunctionIDTransfer;
-        response.Seq := cargo.Seq;
+        response.FileSeq := cargo.FileSeq;
         response.Position := cargo.Position;
         response.Content := data;
         response.ContentSize := size;
@@ -663,11 +665,11 @@ begin
         end;
       end;
 
-      if cont and (fFileSizes[cargo.Seq] > nextpos) then
+      if cont and (fFileSizes[cargo.FileSeq] > nextpos) then
       begin
         response := TOZFCargoCompany.Create;
         response.Command := OZFCargoCompanyFunctionIDDownload;
-        response.Seq := cargo.Seq;
+        response.FileSeq := cargo.FileSeq;
         response.Position := nextpos;
         SendData(response, Receiver.UniqueID, OZFCargoCompanyID);
         response.Free;
@@ -689,13 +691,13 @@ begin
     list := FormFileList.ListView1;
     list.BeginUpdate;
 
-    seq := IntToStr(cargo.Seq);
-    filename := cargo.Name;
-    sizestr := IntToStr(cargo.Size);
-    date := UnixToDateTime(cargo.Expire);
+    seq := IntToStr(cargo.FileSeq);
+    filename := cargo.FileName;
+    sizestr := IntToStr(cargo.FileSize);
+    date := UnixToDateTime(cargo.ExpireTimestamp);
     date := UniversalTimeToLocal(date);
     expire := FormatDateTime('yy-mm-dd hh:nn', date);
-    mime := cargo.Mime;
+    mime := cargo.MimeType;
 
     item := list.Items.FindCaption(0, filename, False, True, False);
     if item = nil then
@@ -756,10 +758,10 @@ begin
         Delete(str, 1, cut);
         if user = fUser then
           user := str;
-        ChatForm(user).RecvFile(str, cargo.Name, cargo.Mime,
-          cargo.Seq, cargo.Size, cargo.Expire);
-        fFileNames[cargo.Seq] := cargo.Name;
-        fFileSizes[cargo.Seq] := cargo.Size;
+        ChatForm(user).RecvFile(str, cargo.FileName, cargo.MimeType,
+          cargo.FileSeq, cargo.FileSize, cargo.ExpireTimestamp);
+        fFileNames[cargo.FileSeq] := cargo.FileName;
+        fFileSizes[cargo.FileSeq] := cargo.FileSize;
       end;
     end;
   end
@@ -768,7 +770,7 @@ begin
     list := FormFileList.ListView1;
     list.BeginUpdate;
 
-    seq := IntToStr(cargo.Seq);
+    seq := IntToStr(cargo.FileSeq);
     for i := list.Items.Count - 1 downto 0 do
     begin
       if seq = list.Items[i].SubItems[2] then
@@ -799,7 +801,7 @@ begin
       tt.functionID := OZFBlahBlahFunctionIDFileShare;
       tt.args := TStringList.Create;
       tt.args.Add(user);
-      tt.args.Add(IntToStr(cargo.Seq));
+      tt.args.Add(IntToStr(cargo.FileSeq));
       SendData(tt, OZFBlahBlahID);
       FreeAndNil(tt);
     end;
@@ -809,16 +811,20 @@ begin
     list := FormFileList.ListView1;
     list.BeginUpdate;
 
-    for i := 0 to (cargo.Args.count div 5) - 1 do
+    files := TStringList.Create;
+
+    for i := 0 to cargo.FileList.Count - 1 do
     begin
-      seq := cargo.Args[i * 5];
-      filename := cargo.Args[i * 5 + 1];
-      sizestr := cargo.Args[i * 5 + 2];
-      mime := cargo.Args[i * 5 + 3];
-      expire := cargo.Args[i * 5 + 4];
-      date := UnixToDateTime(StrToInt(expire));
+      fileInfo := TOZFCargoCompanyFileInfo(cargo.FileList[i]);
+      seq := IntToStr(fileInfo.FileSeq);
+      filename := fileInfo.FileName;
+      sizestr := IntToStr(fileInfo.FileSize);
+      mime := fileInfo.MimeType;
+      date := UnixToDateTime(fileInfo.ExpireTimestamp);
       date := UniversalTimeToLocal(date);
       expire := FormatDateTime('yy-mm-dd hh:nn', date);
+
+      files.Add(filename);
 
       item := list.Items.FindCaption(0, filename, False, True, False);
       if item = nil then
@@ -842,9 +848,11 @@ begin
     for i := list.Items.Count - 1 downto 0 do
     begin
       filename := list.Items[i].Caption;
-      if cargo.Args.IndexOf(filename) = -1 then
+      if files.IndexOf(filename) = -1 then
         list.Items[i].Delete;
     end;
+
+    files.Free;
 
     list.AlphaSort;
     list.EndUpdate;
@@ -1112,20 +1120,20 @@ begin
 
   cargo := TOZFCargoCompany.Create;
   cargo.Command := OZFCargoCompanyFunctionIDShare;
-  cargo.Seq := StrToInt(FileSeq);
+  cargo.FileSeq := StrToInt(FileSeq);
   if Target[1] = '#' then
   begin
     form := FormMain.ChatForm(Target, False);
     if Assigned(form) then
     begin
-      cargo.Args := TStringList.Create;
-      cargo.Args.AddStrings(form.Users);
+      cargo.UserSeqList := TStringList.Create;
+      cargo.UserSeqList.AddStrings(form.Users);
     end;
   end
   else
   begin
-    cargo.Args := TStringList.Create;
-    cargo.Args.Add(Target);
+    cargo.UserSeqList := TStringList.Create;
+    cargo.UserSeqList.Add(Target);
   end;
 
   uniqueID := SendData(cargo, OZFCargoCompanyID);
@@ -1171,7 +1179,7 @@ begin
 
   cargo := TOZFCargoCompany.Create;
   cargo.Command := OZFCargoCompanyFunctionIDDownload;
-  cargo.Seq := Seq;
+  cargo.FileSeq := Seq;
   cargo.Position := nextpos;
 
   UniqueID := SendData(cargo, OZFCargoCompanyID);
@@ -1184,12 +1192,6 @@ end;
 
 procedure TFormMain.HashResult(Target, FileName, MD5, SHA256: String);
 begin
-  if SHA256 = '' then
-  begin
-    Application.MessageBox(PChar(MD5), 'File I/O Error', MB_ICONERROR);
-    exit;
-  end;
-
   fFormSync.Enter;
   fUploadList.Add(Target + '|' + FileName + '|' + MD5 + '|' + SHA256);
   fFormSync.Leave;
@@ -1265,10 +1267,10 @@ begin
 
     cargo := TOZFCargoCompany.Create;
     cargo.Command := OZFCargoCompanyFunctionIDUploadRequest;
-    cargo.Name := ExtractFileName(upload);
-    cargo.Size := filesize;
-    cargo.MD5 := md5;
-    cargo.SHA256 := sha256;
+    cargo.FileName := ExtractFileName(upload);
+    cargo.FileSize := filesize;
+    cargo.MD5 := ''; // fixme
+    cargo.SHA256 :='';
 
     uniqueID :=  SendData(cargo, OZFCargoCompanyID);
     cargo.Free;

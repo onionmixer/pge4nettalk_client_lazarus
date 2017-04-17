@@ -149,7 +149,7 @@ begin
 
   cargo := TOZFCargoCompany.Create;
   cargo.Command := OZFCargoCompanyFunctionIDRemove;
-  cargo.Seq := StrToInt(ListView1.Selected.SubItems[2]);
+  cargo.FileSeq := StrToInt(ListView1.Selected.SubItems[2]);
   FormMain.SendData(cargo, OZFCargoCompanyID);
   cargo.Free;
 end;

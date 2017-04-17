@@ -27,7 +27,7 @@ implementation
 
 uses
   main,
-  LazUTF8Classes,
+  LazUTF8Classes, FileUtil,
   flcHash;
 
 { THashThread }
@@ -66,6 +66,12 @@ begin
     cut := Pos('|', filename);
     target := Copy(filename, 1, cut - 1);
     Delete(filename, 1, cut);
+
+    if (FileUtil.FileSize(filename) > 3 * 1024 * 1024) then
+    begin
+      FormMain.HashResult(target, filename, '', '');
+      continue;
+    end;
 
     try
       fsIn := TFileStreamUTF8.Create(filename, fmOpenRead);
