@@ -27,7 +27,7 @@ implementation
 
 uses
   main,
-  LazUTF8Classes, FileUtil,
+  LazUTF8, FileUtil,
   flcHash;
 
 { THashThread }
@@ -36,7 +36,7 @@ procedure THashThread.Execute;
 var
   target, filename: String;
   cut: Integer;
-  fsIn: TFileStreamUTF8;
+  fsIn: TFileStream;
   data: PByte;
   read: Integer;
   md5: T128BitDigest;
@@ -74,7 +74,7 @@ begin
     end;
 
     try
-      fsIn := TFileStreamUTF8.Create(filename, fmOpenRead);
+      fsIn := TFileStream.Create(filename, fmOpenRead);
       MD5InitDigest(md5);
       SHA256InitDigest(sha256);
       while not Terminated do

@@ -84,12 +84,12 @@ uses
 
 const
   PublicKey =
-    'MIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQKBgQDELgZ/OqvlVGkWOPrRKB26IOss' +
-    'jHeRHKaCaGiaw8pJ7GATrileaqntWukseWGRIsO6CnjosWUcH0NOW4BGjCq4maXr' +
-    'LH8N4EzXKJoFuGKdELDUfEZdozHnAOKY2IiFAKjPSAeUL2Rd5tg7hbIwum0JV9yy' +
-    'mFz7gnP4jKQjCFunBQIDAQAB';
-  ServerHost = 'tknot.steelozcore.net';
-  ServerPort = 4435;
+    'MIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQKBgQDILs5SiBdCmw/3l1ODiYGp1HRK' +
+    'E4lLRvxwQuFAK7ZdPe89R6JYFzaXzu8mmEOr3jVmlmql5uS8CinFfwMq6hhJJmzr' +
+    't3TpCi7He40nrourXU9VZZvXj3LxmdRX5fxA5lCN/UFH8XrQjtmsaxKkOCoSkmWC' +
+    'EMzpcv2NxPYLNCs97QIDAQAB';
+  ServerHost = '127.0.0.1';
+  ServerPort = 8886;
 
 type
 

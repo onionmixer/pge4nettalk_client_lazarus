@@ -1,4 +1,4 @@
-program blahblah_lazarus;
+program pge4nettalk_client_lazarus;
 
 {$mode objfpc}{$H+}
 

@@ -1,0 +1,485 @@
+================================================================================
+  PGE4NetTalk Client Lazarus - 인증 개선 TODO
+================================================================================
+
+프로젝트: pge4nettalk_client_lazarus
+작성일: 2025-10-21
+목적: C 프로젝트(pge4nettalk_client) 방식으로 인증 로직 개선
+
+================================================================================
+  1. 분석 결과 요약
+================================================================================
+
+[현재 방식 - Lazarus 프로젝트]
+  User Login
+    ↓
+  Minions SignIn (Service ID: 0x5353)
+    ↓
+  Minions Response
+    ↓
+  BlahBlah Auth (Service ID: 0x5454, args 없음)
+    ↓
+  Authenticated
+
+문제점:
+  - 2단계 인증으로 인한 지연 (100-200ms)
+  - Minions 서비스 의존성
+  - BlahBlah Auth 호출 시 user_id, password를 전달하지 않음
+  - 불필요한 복잡성
+
+[개선 방식 - C 프로젝트 참고]
+  User Login
+    ↓
+  BlahBlah Auth (Service ID: 0x5454, user_id + password)
+    ↓
+  Authenticated
+
+장점:
+  - 1단계 인증으로 응답 속도 향상 (50-100ms)
+  - 단순한 구조
+  - Minions 의존성 제거
+  - C 프로젝트와 통일된 인증 방식
+
+================================================================================
+  2. 참고 코드 위치
+================================================================================
+
+[C 프로젝트 - pge4nettalk_client]
+  - src/blahblah_protocol.c:27-86
+    → blahblah_create_auth_packet() 함수
+    → Service ID, Version, Function ID, Error Code 전송
+    → Args: [user_id (string), password (string)]
+
+  - include/blahblah_protocol.h:20-30
+    → BLAHBLAH_FUNC_AUTH = 1
+    → BLAHBLAH_VERSION = 1
+
+  - src/tknot_client.c:189-224
+    → tknot_send_auth() 함수
+    → BlahBlah Auth 패킷 생성 및 전송
+
+  - src/main.c:90-119, 226-291
+    → 로그인 처리 및 응답 콜백
+
+[Lazarus 프로젝트 - pge4nettalk_client_lazarus]
+  - main.pas:921-933
+    → SignIn() 메서드 (현재: Minions 사용)
+
+  - main.pas:508-529
+    → OnSession() 메서드 (Minions 응답 처리)
+
+  - main.pas:358-360
+    → 패킷 라우팅 로직 (Minions/BlahBlah 분기)
+
+  - main.pas:103
+    → OZFMinions import
+
+  - ozapi_pascal/ozfblahblah.pas:1-163
+    → TOZFBlahBlah 클래스 (Auth 지원 확인됨)
+    → OZFBlahBlahFunctionIDAuth = 1
+    → args를 통한 파라미터 전달 가능
+
+================================================================================
+  3. 개선 작업 목록
+================================================================================
+
+[단계 1] main.pas의 SignIn 메서드 수정
+  ✓ 분석 완료
+  ☐ 작업 예정
+
+  위치: main.pas:921-933
+
+  현재 코드:
+    procedure TFormMain.SignIn(User: String; Password: String);
+    var
+      request: TOZFMinions;
+    begin
+      request := TOZFMinions.Create;
+      request.functionID := OZFMinionsFunctionIDSignIn;
+      request.errorCode := OZFMinionsErrorCodeNone;
+      request.identifier := User;
+      request.Password := Password;
+      request.useNickname := False;
+      SendData(request, OZFMinionsID);
+      request.Free;
+    end;
+
+  수정 방향:
+    procedure TFormMain.SignIn(User: String; Password: String);
+    var
+      request: TOZFBlahBlah;
+    begin
+      request := TOZFBlahBlah.Create;
+      request.functionID := OZFBlahBlahFunctionIDAuth;
+      request.errorCode := OZFBlahBlahErrorCodeNone;
+      request.args := TStringList.Create;
+      request.args.Add(User);      // Arg 0: user_id
+      request.args.Add(Password);  // Arg 1: password
+      SendData(request, OZFBlahBlahID);
+      request.Free;
+    end;
+
+[단계 2] main.pas의 OnTalkTo 메서드 수정 (Auth 응답 처리)
+  ✓ 분석 완료
+  ☐ 작업 예정
+
+  위치: main.pas:464-506
+
+  현재 코드:
+    OnTalkTo에서 Auth 응답을 처리하지 않음
+
+  수정 방향:
+    - Auth (functionID = 1) 응답 처리 추가
+    - 성공 시 (errorCode = 0) 인증 상태 설정
+    - 실패 시 로그인 폼 표시
+    - C 프로젝트처럼 user_seq, user_name 등 파싱
+
+  예시:
+    if response.functionID = OZFBlahBlahFunctionIDAuth then
+    begin
+      if response.errorCode = OZFBlahBlahErrorCodeNone then
+      begin
+        // 로그인 성공
+        fAuth := True;
+        FormLogin.Hide;
+        // args에서 사용자 정보 파싱 가능
+      end
+      else
+      begin
+        // 로그인 실패
+        FormLogin.Show;
+        FormLogin.Fail;
+      end;
+    end;
+
+[단계 3] main.pas의 OnSession 메서드 제거
+  ✓ 분석 완료
+  ☐ 작업 예정
+
+  위치: main.pas:508-529
+
+  작업:
+    - OnSession 메서드 전체 삭제 (Minions 응답 처리 불필요)
+    - 관련 변수 선언 제거
+
+[단계 4] 패킷 라우팅 로직 수정
+  ✓ 분석 완료
+  ☐ 작업 예정
+
+  위치: main.pas:358-360
+
+  현재 코드:
+    if Stream.Address = OZFMinionsID then
+      OnSession(Stream)
+    else if Stream.Address = OZFBlahBlahID then
+      OnTalkTo(Stream)
+
+  수정 코드:
+    if Stream.Address = OZFBlahBlahID then
+      OnTalkTo(Stream)
+    else if Stream.Address = OZFCargoCompanyID then
+      OnCargoCompany(Stream)
+
+[단계 5] OZFMinions import 제거
+  ✓ 분석 완료
+  ☐ 작업 예정
+
+  위치: main.pas:103
+
+  현재 코드:
+    uses
+      login, filelist,
+      LCLType, IniFiles, DateUtils, LazFileUtils, LazUTF8, flcHash,
+      OZFBlahBlah, OZFMinions, OZFCargoCompany;
+
+  수정 코드:
+    uses
+      login, filelist,
+      LCLType, IniFiles, DateUtils, LazFileUtils, LazUTF8, flcHash,
+      OZFBlahBlah, OZFCargoCompany;
+
+[단계 6] 로그인 실패 처리 개선
+  ✓ 분석 완료
+  ☐ 작업 예정
+
+  작업:
+    - login.pas의 Fail 메서드 확인
+    - 에러 메시지 표시 로직 검토
+    - C 프로젝트처럼 에러 코드별 처리 추가 고려
+
+[단계 7] 코드 테스트 및 검증
+  ☐ 빌드 테스트
+  ☐ 로그인 성공 케이스 테스트
+  ☐ 로그인 실패 케이스 테스트
+  ☐ 네트워크 지연 테스트
+  ☐ 에러 처리 테스트
+
+================================================================================
+  4. 코드 변경 상세
+================================================================================
+
+[파일: main.pas]
+
+제거할 항목:
+  - Line 103: OZFMinions import
+  - Line 358-359: Minions 패킷 라우팅
+  - Line 508-529: OnSession 메서드 전체
+  - Line 510: TOZFMinions 변수 선언
+
+수정할 항목:
+  - Line 921-933: SignIn 메서드
+    → TOZFMinions → TOZFBlahBlah
+    → Minions SignIn → BlahBlah Auth
+    → args에 user_id, password 추가
+
+  - Line 464-506: OnTalkTo 메서드
+    → Auth 응답 처리 추가
+    → errorCode 체크
+    → 성공/실패 분기
+
+추가할 항목:
+  - OnTalkTo에 Auth 응답 케이스 추가
+  - 사용자 정보 파싱 로직 (필요시)
+
+================================================================================
+  5. 프로토콜 비교
+================================================================================
+
+[C 프로젝트 - BlahBlah Auth 패킷]
+  Service ID:   0x5454 (2 bytes)
+  Version:      1      (2 bytes)
+  Function ID:  1      (4 bytes) - AUTH
+  Error Code:   0      (4 bytes) - NONE
+  Arg Count:    2      (variable)
+  Arg 0 Type:   1      (1 byte)  - STRING
+  Arg 0 Value:  user_id (string)
+  Arg 1 Type:   1      (1 byte)  - STRING
+  Arg 1 Value:  password (string)
+
+[Lazarus 프로젝트 - 현재 BlahBlah Auth]
+  Service ID:   0x5454 (2 bytes)
+  Function ID:  1      (2 bytes) - AUTH
+  Error Code:   0      (2 bytes) - NONE
+  Arg Count:    0      (variable) ← 문제: args 없음!
+
+[Lazarus 프로젝트 - 개선 후 BlahBlah Auth]
+  Service ID:   0x5454 (2 bytes)
+  Function ID:  1      (2 bytes) - AUTH
+  Error Code:   0      (2 bytes) - NONE
+  Arg Count:    2      (variable)
+  Arg 0:        user_id (string)
+  Arg 1:        password (string)
+
+주의사항:
+  - C 프로젝트는 Version 필드가 있음 (2 bytes)
+  - Lazarus 프로젝트는 Version 없이 Function ID 바로 전송
+  - ozfblahblah.pas 확인 결과: Version 필드 없음
+  - 서버가 어떤 형식을 기대하는지 확인 필요!
+
+================================================================================
+  6. 테스트 계획
+================================================================================
+
+[사전 준비]
+  ☐ 테스트 서버 연결 확인
+  ☐ 테스트 계정 준비 (유효한 ID/PW)
+  ☐ 로그 출력 추가 (디버깅용)
+
+[기능 테스트]
+  ☐ 올바른 ID/PW로 로그인 → 성공 확인
+  ☐ 잘못된 ID/PW로 로그인 → 실패 메시지 확인
+  ☐ 빈 ID/PW로 로그인 → 에러 처리 확인
+  ☐ 로그인 후 채팅 기능 정상 작동 확인
+  ☐ 로그아웃 후 재로그인 확인
+
+[성능 테스트]
+  ☐ 로그인 응답 시간 측정
+  ☐ 기존 방식 대비 성능 개선 확인
+  ☐ 네트워크 지연 시 동작 확인
+
+[에러 처리 테스트]
+  ☐ 서버 연결 실패 시나리오
+  ☐ 타임아웃 시나리오
+  ☐ 잘못된 응답 패킷 처리
+
+================================================================================
+  7. 주의사항 및 리스크
+================================================================================
+
+[호환성]
+  ⚠ 서버가 Minions 인증을 필수로 요구하는 경우 문제 발생 가능
+  → 서버 개발팀과 확인 필요
+  → 서버가 BlahBlah 직접 인증 지원하는지 확인
+
+[프로토콜 차이]
+  ⚠ C 프로젝트는 Version 필드 포함, Lazarus는 미포함
+  → 서버가 어떤 형식을 기대하는지 확인
+  → 필요시 ozfblahblah.pas 수정 필요
+
+[기존 사용자]
+  ⚠ 이미 Minions로 생성된 세션이 있는 경우
+  → 서버 측 세션 정리 필요 여부 확인
+
+[롤백 계획]
+  ✓ Git 커밋 전 백업
+  ✓ 변경 사항 단계별 커밋
+  ✓ 문제 발생 시 이전 버전으로 되돌리기 가능
+
+================================================================================
+  8. 참고 자료
+================================================================================
+
+- C 프로젝트 경로: ../pge4nettalk_client/
+- C 프로젝트 TODO: ../pge4nettalk_client/TODO.txt
+- 프로토콜 문서: ../pge4nettalk_client/CHAT_PROTOCOL.txt
+- API 문서: ozapi_pascal/ 디렉토리
+
+================================================================================
+  9. 작업 진행 상태
+================================================================================
+
+[2025-10-21]
+  ✓ C 프로젝트 분석 완료
+  ✓ Lazarus 프로젝트 현재 방식 분석 완료
+  ✓ ozfblahblah.pas 기능 확인 완료
+  ✓ TODO.txt 작성 완료
+  ☐ 코드 수정 시작 대기 중
+
+================================================================================
+  END OF TODO
+================================================================================
+
+================================================================================
+  10. 작업 진행 상태 업데이트 [2025-10-21 완료]
+================================================================================
+
+[2025-10-21 - 코드 개선 완료]
+  ✓ main.pas SignIn 메서드 변경 완료
+  ✓ main.pas OnTalkTo Auth 에러 처리 추가 완료
+  ✓ main.pas OnSession 메서드 제거 완료 (23줄 삭제)
+  ✓ 패킷 라우팅 로직 간소화 완료
+  ✓ OZFMinions import 제거 완료
+  ✓ 총 변경: +32줄, -47줄 (순 15줄 감소)
+
+  ☐ 컴파일 테스트 대기 중
+  ☐ 기능 테스트 대기 중
+  ☐ 서버 호환성 확인 필요
+
+================================================================================
+  11. Lazarus 4.2 호환성 문제 해결 [2025-10-21 진행중]
+================================================================================
+
+[문제 1: TFileStreamUTF8 식별자 오류]
+  ✓ 해결 완료
+
+  에러:
+    Error: Identifier not found "TFileStreamUTF8"
+
+  원인:
+    - Lazarus 4.2에서 TFileStreamUTF8이 제거됨
+    - 이전 버전에서는 FileUtil 유닛에서 제공
+
+  해결:
+    - main.pas:519, 520, 562, 622, 624 (5개 위치)
+    - hash.pas:39, 77 (2개 위치)
+    - 모든 TFileStreamUTF8을 TFileStream으로 변경
+    - FileUtil, LazUTF8을 implementation uses 섹션에 유지
+    - 총 7개 변경 완료
+
+[문제 2: UTF8 접미사 파일 함수 오류]
+  ✓ 해결 완료
+
+  에러:
+    - main.pas(621,8) Error: identifier idents no member "FileExistsUTF8"
+    - main.pas(1149,8) Error: identifier idents no member "FileExistsUTF8"
+    - main.pas(1152,20) Error: identifier idents no member "FileSizeUTF8"
+    - main.pas(1159,8) Error: identifier idents no member "FileExistsUTF8"
+    - main.pas(1161,9) Error: identifier idents no member "DeleteFileUTF8"
+    - main.pas(1238,12) Error: identifier idents no member "FileExistsUTF8"
+    - main.pas(1244,12) Error: identifier idents no member "DirectoryExistsUTF8"
+    - main.pas(1250,20) Error: identifier idents no member "FileSizeUTF8"
+
+  원인:
+    - Lazarus 4.2에서 UTF8 접미사가 붙은 파일 함수들이 제거됨
+    - FileExistsUTF8, FileSizeUTF8, DeleteFileUTF8, DirectoryExistsUTF8
+
+  해결:
+    ✓ FileExistsUTF8 → FileExists (4개 위치: 621, 1149, 1159, 1238)
+    ✓ FileSizeUTF8 → FileUtil.FileSize (2개 위치: 1152, 1250)
+    ✓ DeleteFileUTF8 → DeleteFile (1개 위치: 1161)
+    ✓ DirectoryExistsUTF8 → DirectoryExists (2개 위치: 125, 1244)
+    ✓ 총 9개 함수 호출 변경 완료
+
+  주의사항:
+    - FileSizeUTF8는 FileUtil.FileSize()로 변경 (명시적 유닛 지정 필요)
+    - 내장 FileSize()는 파일 변수용이므로 FileUtil.FileSize() 사용
+
+[추가 작업]
+  ☐ 컴파일 테스트 (lazbuild pge4nettalk_client_lazarus.lpi)
+  ☐ 컴파일 성공 확인
+  ☐ 기능 테스트 진행
+
+================================================================================
+  12. BlahBlah 프로토콜 포맷 호환성 수정 [2025-10-21 완료]
+================================================================================
+
+[문제: C 프로젝트와 프로토콜 포맷 불일치]
+  ✓ 해결 완료
+
+  에러:
+    서버 로그: "Failed to parse BlahBlah packet: vector::reserve"
+    원인: Lazarus와 C 프로젝트의 패킷 포맷이 완전히 다름
+
+  C 프로젝트 포맷 (blahblah_protocol.c):
+    - Service ID:  2 bytes (uint16)
+    - Version:     2 bytes (uint16) ← Lazarus에 없음!
+    - Function ID: 4 bytes (uint32) ← Lazarus는 2 bytes
+    - Error Code:  4 bytes (uint32) ← Lazarus는 2 bytes
+    - Arg Count:   variable
+    - For each arg:
+      - Type:      1 byte (uint8) ← Lazarus에 없음!
+      - Value:     string/number
+
+  기존 Lazarus 포맷 (ozfblahblah.pas):
+    - Service ID:  2 bytes (uint16)
+    - Function ID: 2 bytes (uint16) ✗
+    - Error Code:  2 bytes (uint16) ✗
+    - Arg Count:   variable
+    - For each arg:
+      - Value:     string only ✗
+
+  수정 내용:
+    ✓ ozapi_pascal/ozfblahblah.pas 수정
+    ✓ Version 상수 추가: OZFBlahBlahVersion = 1
+    ✓ Argument Type 상수 추가:
+      - OZFBlahBlahArgTypeNumber = 0
+      - OZFBlahBlahArgTypeString = 1
+    ✓ fFunctionID: Word → DWord (2→4 bytes)
+    ✓ fErrorCode: Word → DWord (2→4 bytes)
+    ✓ setup() 함수 수정:
+      - putUInt16(OZFBlahBlahVersion) 추가
+      - putUInt16(fFunctionID) → putUInt32(fFunctionID)
+      - putUInt16(fErrorCode) → putUInt32(fErrorCode)
+      - putUInt8(OZFBlahBlahArgTypeString) 추가 (각 arg 앞)
+    ✓ Create(data, size) 생성자 수정:
+      - version := getUInt16 추가
+      - getUInt16 → getUInt32 (functionID, errorCode)
+      - argType := getUInt8 추가 (각 arg 읽기 전)
+      - Number 타입 인자 지원 추가
+
+  새로운 Lazarus 포맷 (수정 후):
+    - Service ID:  2 bytes (uint16) ✓
+    - Version:     2 bytes (uint16) ✓
+    - Function ID: 4 bytes (uint32) ✓
+    - Error Code:  4 bytes (uint32) ✓
+    - Arg Count:   variable
+    - For each arg:
+      - Type:      1 byte (uint8) ✓
+      - Value:     string/number ✓
+
+  다음 단계:
+    ☐ 컴파일 테스트
+    ☐ 로그인 테스트
+    ☐ 서버 연동 확인
+
+================================================================================

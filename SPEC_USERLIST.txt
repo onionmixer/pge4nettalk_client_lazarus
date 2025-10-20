@@ -1,0 +1,826 @@
+================================================================================
+  PGE4NetTalk Client Lazarus - USER LIST 관리 규격
+================================================================================
+
+프로젝트: pge4nettalk_client_lazarus
+작성일: 2025-10-21
+목적: 사용자 목록 확인 및 관리 방법에 대한 코드 규칙 정리
+
+================================================================================
+  1. USER LIST 개요
+================================================================================
+
+사용자 목록은 BlahBlah 프로토콜의 Function ID = 3 (OZFBlahBlahFunctionIDStat)을
+통해 서버로부터 수신되며, 두 가지 방식으로 관리됩니다:
+
+  1. TreeView1 (시각적 표시)
+     - 그룹별로 계층 구조로 사용자 표시
+     - 실시간 온라인/오프라인 상태 반영
+     - 더블클릭으로 채팅 창 열기
+
+  2. fNickList (내부 저장소)
+     - 사용자 ID → 닉네임 매핑
+     - 빠른 닉네임 조회
+     - 온라인 사용자만 유지
+
+================================================================================
+  2. STAT 패킷 구조
+================================================================================
+
+[STAT 요청 패킷] - 클라이언트 → 서버
+
+  Service ID:   0x5454 (2 bytes) - OZFBlahBlahID
+  Version:      1      (2 bytes) - OZFBlahBlahVersion
+  Function ID:  3      (4 bytes) - OZFBlahBlahFunctionIDStat
+  Error Code:   0      (4 bytes) - OZFBlahBlahErrorCodeNone
+  Arg Count:    0      (variable)
+
+  Arguments: 없음
+
+  주의사항:
+    - 현재 Lazarus 클라이언트는 STAT 요청을 보내지 않음
+    - 서버가 자동으로 사용자 상태 변화 시 STAT 전송
+
+[STAT 응답 패킷] - 서버 → 클라이언트
+
+  Service ID:   0x5454 (2 bytes)
+  Version:      1      (2 bytes)
+  Function ID:  3      (4 bytes) - OZFBlahBlahFunctionIDStat
+  Error Code:   0      (4 bytes)
+  Arg Count:    5      (variable)
+
+  Arguments:
+    Arg 0: User ID (String)
+      - Type: 1 (String)
+      - Value: 사용자 고유 ID (숫자 문자열)
+
+    Arg 1: Nickname (String)
+      - Type: 1 (String)
+      - Value: 사용자 닉네임
+
+    Arg 2: Group (String)
+      - Type: 1 (String)
+      - Value: 그룹 이름 (예: "Group", "Admin" 등)
+
+    Arg 3: Status (String)
+      - Type: 1 (String)
+      - Value: 사용자 상태
+        - "online" : 온라인
+        - "offline" : 오프라인
+        - 기타 상태 가능
+
+    Arg 4: Image (String)
+      - Type: 1 (String)
+      - Value: 프로필 이미지 URL 또는 경로
+      - 현재 사용되지 않음
+
+참고:
+  C 프로젝트는 다른 포맷 사용:
+    - Arg 0: user_seq (Number)
+    - Arg 1: nickname (String)
+    - Arg 2: group (String)
+    - Args 3개만 사용 (status, image 없음)
+
+================================================================================
+  3. STAT 수신 처리
+================================================================================
+
+[코드 위치]
+  파일: main.pas
+  메서드: TFormMain.OnTalkTo (Line 440-454)
+
+[수신 절차]
+
+  1. 서버로부터 STAT 패킷 수신
+     - OnTalkTo()에서 TOZFBlahBlah 패킷 파싱
+
+  2. Function ID 확인
+     - if tt.functionID = OZFBlahBlahFunctionIDStat
+
+  3. 사용자 정보 추출
+     - user := tt.args[0]    (사용자 ID)
+     - nick := tt.args[1]    (닉네임)
+     - group := tt.args[2]   (그룹명)
+     - status := tt.args[3]  (상태)
+     - image := tt.args[4]   (이미지, 미사용)
+
+  4. 닉네임 저장소 업데이트
+     - 온라인: fNickList[user] := nick
+     - 오프라인: fNickList.Delete(user)
+
+  5. TreeView 업데이트
+     - UpdateUserInfo(user, nick, group, status, image) 호출
+
+  6. 자신의 정보인 경우
+     - Caption := 'BlahBlah - ' + nick (창 제목 변경)
+
+[코드 예제]
+
+  // main.pas:440-454
+  else if tt.functionID = OZFBlahBlahFunctionIDStat then
+  begin
+    // 1. 인자 파싱
+    user := tt.args[0];
+    nick := tt.args[1];
+    group := tt.args[2];
+    status := tt.args[3];
+    image := tt.args[4];
+
+    // 2. 닉네임 저장소 업데이트
+    if status <> 'offline' then
+      fNickList[user] := nick    // 온라인: 추가/갱신
+    else if fNickList.HasKey(User) then
+      fNickList.Delete(user);    // 오프라인: 삭제
+
+    // 3. TreeView 업데이트
+    updateUserInfo(user, nick, group, status, image);
+
+    // 4. 자신의 정보면 창 제목 변경
+    if user = fUser then
+      Caption := 'BlahBlah - ' + nick;
+  end
+
+[STAT 수신 시나리오]
+
+  1. 로그인 직후
+     - 서버가 현재 온라인인 모든 사용자의 STAT 전송
+     - 각 사용자마다 개별 STAT 패킷 수신
+
+  2. 다른 사용자 로그인
+     - 해당 사용자의 STAT 패킷 수신
+     - status = "online"
+
+  3. 다른 사용자 로그아웃
+     - 해당 사용자의 STAT 패킷 수신
+     - status = "offline"
+
+  4. 사용자 정보 변경
+     - 닉네임 변경 등
+     - 변경된 정보로 STAT 패킷 수신
+
+================================================================================
+  4. TreeView 업데이트
+================================================================================
+
+[코드 위치]
+  파일: main.pas
+  메서드: TFormMain.UpdateUserInfo (Line 864-910)
+
+[TreeView 구조]
+
+  TreeView1
+    ├─ Users (그룹 노드)
+    │   ├─ user1_nick (사용자 노드, Data = user1_id)
+    │   ├─ user2_nick (사용자 노드, Data = user2_id)
+    │   └─ user3_nick (사용자 노드, Data = user3_id)
+    ├─ Admin (그룹 노드)
+    │   └─ admin_nick (사용자 노드, Data = admin_id)
+    └─ ...
+
+  - 최상위 노드: 그룹명 (displayGroup)
+  - 하위 노드: 사용자 닉네임 (nick)
+  - 노드 Data: 사용자 ID (Integer Pointer)
+
+[업데이트 절차]
+
+  1. 입력 검증
+     - if (User = '') or (Nick = '') or (Group = '') then exit
+
+  2. 그룹명 표시 변환
+     - "Group" → "Users" 자동 변환
+     - 기타 그룹명은 그대로 표시
+
+  3. 그룹 노드 찾기/생성
+     - FindTopLvlNode(displayGroup)로 검색
+     - 없으면:
+       - 오프라인이면 종료 (새 그룹 생성 안 함)
+       - 온라인이면 새 그룹 노드 생성
+
+  4. 사용자 노드 찾기
+     - 그룹 노드의 자식 노드들 검색
+     - userNode.Data와 user ID 비교
+
+  5. 사용자 노드 추가/삭제
+     - 온라인 + 노드 없음: AddChild()로 추가
+     - 오프라인 + 노드 있음: Delete()로 삭제
+     - 온라인 + 노드 있음: 유지 (닉네임 변경은 자동 반영 안 됨)
+
+  6. 정렬 및 표시
+     - 새 그룹이면 Expand(True)로 펼치기
+     - AlphaSort()로 알파벳 순 정렬
+
+[코드 예제]
+
+  procedure TFormMain.UpdateUserInfo(User, Nick, Group, Status, Image: String);
+  var
+    node: TTreeNode;
+    userNode: TTreeNode;
+    newGroup: Boolean;
+    userSeq: Integer;
+    displayGroup: String;
+  begin
+    // 1. 입력 검증
+    if (User = '') or (Nick = '') or (Group = '') then
+      exit;
+
+    // 2. 그룹명 변환
+    if Group = 'Group' then
+      displayGroup := 'Users'
+    else
+      displayGroup := Group;
+
+    // 3. 그룹 노드 찾기/생성
+    newGroup := False;
+    node := TreeView1.Items.FindTopLvlNode(displayGroup);
+    if node = nil then
+    begin
+      if (Status = 'offline') then
+        exit;  // 오프라인이면 새 그룹 만들지 않음
+      newGroup := True;
+      node := TreeView1.Items.Add(nil, displayGroup);
+    end;
+
+    // 4. 사용자 노드 찾기
+    userSeq := StrToInt(user);
+    userNode := node.GetFirstChild;
+    while (userNode <> nil) and (userNode.Data <> Pointer(userSeq)) do
+      userNode := userNode.GetNextSibling;
+
+    // 5. 사용자 노드 추가/삭제
+    if (userNode = nil) and (Status <> 'offline') then
+    begin
+      // 온라인인데 노드 없음 → 추가
+      userNode := TreeView1.Items.AddChild(node, nick);
+      userNode.Data := Pointer(userSeq);  // ID를 Data에 저장
+    end
+    else if (userNode <> nil) And (Status = 'offline') then
+    begin
+      // 오프라인인데 노드 있음 → 삭제
+      userNode.Delete;
+      userNode := nil;
+    end;
+
+    // 6. 정렬 및 표시
+    if newGroup then
+      node.Expand(True);  // 새 그룹이면 펼치기
+    TreeView1.AlphaSort;  // 알파벳 순 정렬
+  end;
+
+[TreeView 업데이트 흐름]
+
+  STAT 수신
+    ↓
+  Parse Args (user, nick, group, status, image)
+    ↓
+  Group 변환 ("Group" → "Users")
+    ↓
+  Find/Create 그룹 노드
+    ↓
+  Find 사용자 노드 (by user ID in Data)
+    ↓
+  ┌─────────────┬─────────────┐
+  │ Online      │ Offline     │
+  ├─────────────┼─────────────┤
+  │ 노드 없음   │ 노드 있음   │
+  │ → 추가      │ → 삭제      │
+  │             │             │
+  │ 노드 있음   │ 노드 없음   │
+  │ → 유지      │ → 무시      │
+  └─────────────┴─────────────┘
+    ↓
+  Expand (if newGroup)
+    ↓
+  AlphaSort
+
+================================================================================
+  5. 닉네임 저장소 (fNickList)
+================================================================================
+
+[데이터 구조]
+
+  타입: TStringDictionary
+  선언: main.pas:54
+  용도: User ID → Nickname 빠른 조회
+
+  fNickList: TStringDictionary
+    Key: User ID (String, 예: "12345")
+    Value: Nickname (String, 예: "홍길동")
+
+[주요 연산]
+
+  1. 초기화
+     - FormCreate: fNickList := TStringDictionary.Create;
+
+  2. 추가/갱신
+     - fNickList[user] := nick;
+     - 온라인 사용자만 저장
+
+  3. 삭제
+     - if fNickList.HasKey(User) then
+         fNickList.Delete(user);
+     - 오프라인 시 삭제
+
+  4. 조회
+     - if fNickList.HasKey(User) then
+         Result := fNickList[User]
+     - GetNick() 메서드 사용
+
+  5. 전체 삭제
+     - fNickList.Clear;
+     - 연결 종료 시
+
+  6. 해제
+     - FormDestroy: fNickList.Free;
+
+[코드 위치]
+
+  main.pas:
+    - Line 54: 선언
+    - Line 89: Property
+    - Line 153: 생성
+    - Line 208: 해제
+    - Line 406: Clear (연결 종료 시)
+    - Line 448-450: 추가/삭제 (STAT 수신 시)
+    - Line 1092-1093: 조회 (GetNick)
+
+[GetNick 메서드]
+
+  function TFormMain.GetNick(User: String): String;
+  begin
+    if fNickList.HasKey(User) then
+      Result := fNickList[User]
+    else
+      Result := User;  // 없으면 ID 그대로 반환
+  end;
+
+  사용 예:
+    - chat.pas:435: 메시지 표시 시 닉네임 조회
+    - 채팅 창에서 발신자 표시
+
+================================================================================
+  6. 사용자 목록 확인 방법
+================================================================================
+
+[방법 1: TreeView에서 시각적 확인]
+
+  위치: 메인 창 좌측 TreeView1
+
+  확인 가능 정보:
+    - 그룹별 사용자 목록
+    - 사용자 닉네임
+    - 온라인 사용자만 표시
+
+  사용자 상호작용:
+    - 더블클릭: 해당 사용자와 채팅 창 열기
+    - 알파벳 순 정렬
+    - 그룹 펼치기/접기
+
+[방법 2: 코드에서 fNickList 조회]
+
+  전체 온라인 사용자 목록:
+    for user in fNickList.Keys do
+    begin
+      nick := fNickList[user];
+      // 처리
+    end;
+
+  특정 사용자 닉네임 조회:
+    nick := FormMain.GetNick(user_id);
+
+  사용자 온라인 여부 확인:
+    isOnline := fNickList.HasKey(user_id);
+
+[방법 3: TreeView에서 프로그래밍 방식 조회]
+
+  모든 그룹 노드 순회:
+    var
+      groupNode, userNode: TTreeNode;
+      userID, userNick: String;
+    begin
+      groupNode := TreeView1.Items.GetFirstNode;
+      while groupNode <> nil do
+      begin
+        // 그룹명: groupNode.Text
+
+        // 해당 그룹의 사용자들
+        userNode := groupNode.GetFirstChild;
+        while userNode <> nil do
+        begin
+          userNick := userNode.Text;
+          userID := IntToStr(PtrInt(userNode.Data));
+          // 처리
+          userNode := userNode.GetNextSibling;
+        end;
+
+        groupNode := groupNode.GetNextSibling;
+      end;
+    end;
+
+  특정 사용자 노드 찾기:
+    function FindUserNode(userID: String): TTreeNode;
+    var
+      groupNode, userNode: TTreeNode;
+      userSeq: Integer;
+    begin
+      Result := nil;
+      userSeq := StrToInt(userID);
+
+      groupNode := TreeView1.Items.GetFirstNode;
+      while groupNode <> nil do
+      begin
+        userNode := groupNode.GetFirstChild;
+        while userNode <> nil do
+        begin
+          if userNode.Data = Pointer(userSeq) then
+          begin
+            Result := userNode;
+            exit;
+          end;
+          userNode := userNode.GetNextSibling;
+        end;
+        groupNode := groupNode.GetNextSibling;
+      end;
+    end;
+
+================================================================================
+  7. 사용자 선택 및 채팅 창 열기
+================================================================================
+
+[코드 위치]
+  파일: main.pas
+  메서드: TFormMain.TreeView1DblClick (Line 320-327)
+
+[선택 절차]
+
+  1. 사용자 더블클릭
+     - TreeView1DblClick 이벤트 발생
+
+  2. 선택된 노드 확인
+     - if TreeView1.Selected = nil then exit
+
+  3. 사용자 ID 추출
+     - User := IntToStr(PtrInt(TreeView1.Selected.Data))
+     - 노드의 Data에서 ID 가져오기
+
+  4. 채팅 창 열기
+     - ChatForm(User).Show
+
+[코드 예제]
+
+  procedure TFormMain.TreeView1DblClick(Sender: TObject);
+  var
+    User: String;
+  begin
+    if TreeView1.Selected = nil then exit;
+
+    // 노드의 Data에서 사용자 ID 추출
+    User := IntToStr(PtrInt(TreeView1.Selected.Data));
+
+    // 채팅 창 열기
+    ChatForm(User).Show;
+  end;
+
+[주의사항]
+
+  - 그룹 노드를 더블클릭하면:
+    - Data가 0 (nil)
+    - User = "0"
+    - ChatForm("0") 호출 → 그룹 채팅 창
+
+  - 사용자 노드를 더블클릭하면:
+    - Data = 사용자 ID (Integer)
+    - User = 사용자 ID (String)
+    - ChatForm(userID) 호출 → 1:1 채팅 창
+
+================================================================================
+  8. 사용자 목록 데이터 흐름
+================================================================================
+
+[초기 로그인 시]
+
+  Client                    Server                 TreeView/NickList
+    |                          |                           |
+    |--- Auth Request -------->|                           |
+    |                          |                           |
+    |<-- Auth Success ---------|                           |
+    |                          |                           |
+    |<-- STAT (user1) ---------|                           |
+    |                      (online)                        |
+    |                          |--- UpdateUserInfo ------->|
+    |                          |   Add to TreeView         |
+    |                          |   fNickList[user1]=nick1  |
+    |<-- STAT (user2) ---------|                           |
+    |                      (online)                        |
+    |                          |--- UpdateUserInfo ------->|
+    |                          |   Add to TreeView         |
+    |                          |   fNickList[user2]=nick2  |
+    |<-- STAT (user3) ---------|                           |
+    |                      (online)                        |
+    |                          |--- UpdateUserInfo ------->|
+    |                          |   Add to TreeView         |
+    |                          |   fNickList[user3]=nick3  |
+
+[다른 사용자 로그인 시]
+
+  Client A              Server              Client B            TreeView
+    |                      |                    |                   |
+    |                      |<--- Auth ----------|                   |
+    |                      |                    |                   |
+    |<-- STAT (B) ---------|                    |                   |
+    |   (online)           |                    |                   |
+    |                      |                    |                   |
+    UpdateUserInfo(B, nick, "Users", "online")                      |
+      ↓                                                              |
+    fNickList[B] = nick                                             |
+      ↓                                                              |
+    TreeView.Add(B, nick) ----------------------------------------->|
+
+[사용자 로그아웃 시]
+
+  Client A              Server              Client B            TreeView
+    |                      |                    |                   |
+    |                      |<--- Quit ----------|                   |
+    |                      |                    X                   |
+    |<-- STAT (B) ---------|                                        |
+    |   (offline)          |                                        |
+    |                      |                                        |
+    UpdateUserInfo(B, nick, "Users", "offline")                     |
+      ↓                                                              |
+    fNickList.Delete(B)                                             |
+      ↓                                                              |
+    TreeView.Delete(B) ------------------------------------------->|
+
+================================================================================
+  9. 주요 변수 및 상수
+================================================================================
+
+[상수]
+
+  OZFBlahBlahID = 0x5454
+    - BlahBlah 서비스 ID
+
+  OZFBlahBlahFunctionIDStat = 3
+    - 사용자 상태 Function ID
+
+[전역 변수 (TFormMain)]
+
+  TreeView1: TTreeView
+    - 사용자 목록 시각적 표시
+    - 계층 구조: 그룹 → 사용자
+
+  fNickList: TStringDictionary
+    - User ID → Nickname 매핑
+    - 온라인 사용자만 유지
+
+  fUser: String
+    - 현재 로그인한 사용자 ID
+    - 자신의 STAT 수신 시 창 제목 변경용
+
+[TreeNode 속성]
+
+  Text: String
+    - 표시 텍스트
+    - 그룹 노드: 그룹명 (예: "Users")
+    - 사용자 노드: 닉네임 (예: "홍길동")
+
+  Data: Pointer
+    - 사용자 ID 저장
+    - Integer를 Pointer로 캐스팅
+    - 그룹 노드: nil (0)
+    - 사용자 노드: User ID (Integer)
+
+================================================================================
+  10. 사용자 상태 관리
+================================================================================
+
+[상태 종류]
+
+  "online"  : 온라인 (TreeView에 표시)
+  "offline" : 오프라인 (TreeView에서 제거)
+  기타      : 구현 의존 (현재는 online/offline만 처리)
+
+[상태 전환 처리]
+
+  online → online:
+    - STAT 수신, 노드 이미 있음
+    - 아무 처리 안 함 (닉네임 변경 반영 안 됨)
+    - 개선 필요: 닉네임 변경 시 노드 Text 업데이트
+
+  offline → online:
+    - STAT 수신, 노드 없음
+    - TreeView에 추가
+    - fNickList에 추가
+
+  online → offline:
+    - STAT 수신, 노드 있음
+    - TreeView에서 삭제
+    - fNickList에서 삭제
+
+  offline → offline:
+    - STAT 수신, 노드 없음
+    - 아무 처리 안 함
+
+[개선 사항]
+
+  현재 구현의 한계:
+    - 닉네임 변경 시 TreeView 자동 업데이트 안 됨
+    - 온라인 상태에서 닉네임 변경 STAT 수신해도 반영 안 됨
+
+  개선 방법:
+    - UpdateUserInfo에서 기존 노드 발견 시:
+      if userNode <> nil and Status <> 'offline' then
+      begin
+        userNode.Text := nick;  // 닉네임 업데이트
+      end
+
+================================================================================
+  11. 에러 처리
+================================================================================
+
+[빈 데이터 처리]
+
+  - User, Nick, Group 중 하나라도 빈 문자열이면 무시
+  - if (User = '') or (Nick = '') or (Group = '') then exit
+
+[중복 노드 방지]
+
+  - 사용자 ID로 검색하여 기존 노드 확인
+  - 있으면 추가 안 함 (상태에 따라 삭제만)
+
+[오프라인 사용자 처리]
+
+  - 새 그룹 생성 안 함
+  - 노드가 있으면 삭제만
+
+[예외 상황]
+
+  - STAT args 개수 부족: 크래시 가능 (서버 프로토콜 오류)
+  - User ID가 숫자 아님: StrToInt 예외 발생
+  - TreeView 접근 중 삭제: 스레드 안전성 이슈 가능
+
+================================================================================
+  12. 테스트 시나리오
+================================================================================
+
+[사용자 목록 확인]
+
+  1. 로그인
+     - TreeView에 온라인 사용자들 표시 확인
+     - 그룹별로 분류 확인
+     - 알파벳 순 정렬 확인
+
+  2. 다른 사용자 로그인
+     - 실시간으로 TreeView에 추가되는지 확인
+     - 올바른 그룹에 추가되는지 확인
+
+  3. 다른 사용자 로그아웃
+     - 실시간으로 TreeView에서 제거되는지 확인
+     - fNickList에서도 제거되는지 확인
+
+[사용자 선택]
+
+  1. 사용자 노드 더블클릭
+     - 1:1 채팅 창 열리는지 확인
+     - 올바른 사용자와 채팅 창 열리는지 확인
+
+  2. 그룹 노드 더블클릭
+     - 그룹 채팅 창 동작 확인
+
+[닉네임 조회]
+
+  1. GetNick() 호출
+     - 온라인 사용자: 닉네임 반환 확인
+     - 오프라인 사용자: ID 반환 확인
+
+================================================================================
+  13. 코드 파일 구조
+================================================================================
+
+[main.pas]
+
+  - TFormMain.OnTalkTo() (Line 440-454)
+    → STAT 수신 및 처리
+
+  - TFormMain.UpdateUserInfo() (Line 864-910)
+    → TreeView 업데이트
+
+  - TFormMain.TreeView1DblClick() (Line 320-327)
+    → 사용자 선택 처리
+
+  - TFormMain.GetNick() (Line 1090-1095)
+    → 닉네임 조회
+
+  - fNickList 관리
+    → 생성(153), 추가/삭제(448-450), 조회(1092-1093), 해제(208)
+
+[main.lfm]
+
+  - TreeView1 정의
+    → 시각적 속성, 이벤트 핸들러
+
+[ozapi_pascal/ozfblahblah.pas]
+
+  - OZFBlahBlahFunctionIDStat = 3
+    → STAT Function ID 상수
+
+  - TOZFBlahBlah 클래스
+    → STAT 패킷 파싱/생성
+
+================================================================================
+  14. 프로토콜 호환성
+================================================================================
+
+[Lazarus vs C 프로젝트 차이]
+
+  Lazarus:
+    - Args: [user_id(string), nick(string), group(string),
+             status(string), image(string)]
+    - 5개 인자
+    - status 필드로 online/offline 구분
+
+  C 프로젝트:
+    - Args: [user_seq(number), nickname(string), group(string)]
+    - 3개 인자
+    - STAT는 온라인 사용자만 전송
+    - 오프라인은 별도 처리
+
+[서버 요구사항]
+
+  - BlahBlah 프로토콜 지원
+  - STAT Function (ID=3) 지원
+  - Args 형식: [user_id, nickname, group, status, image]
+  - 사용자 상태 변화 시 자동 전송
+
+================================================================================
+  15. 향후 개선 사항
+================================================================================
+
+[1. STAT 요청 기능 추가]
+
+  현재: 서버가 자동으로 STAT 전송
+  개선: 클라이언트가 명시적으로 STAT 요청 가능
+
+  구현:
+    procedure TFormMain.RequestUserList;
+    var
+      request: TOZFBlahBlah;
+    begin
+      request := TOZFBlahBlah.Create;
+      request.functionID := OZFBlahBlahFunctionIDStat;
+      request.errorCode := OZFBlahBlahErrorCodeNone;
+      request.args := TStringList.Create;
+      // args 없음
+      SendData(request, OZFBlahBlahID);
+      request.Free;
+    end;
+
+[2. 닉네임 변경 반영]
+
+  현재: 온라인 상태에서 닉네임 변경해도 TreeView 업데이트 안 됨
+  개선: UpdateUserInfo에서 기존 노드 Text 업데이트
+
+  구현:
+    if (userNode <> nil) and (Status <> 'offline') then
+    begin
+      // 노드 있고 온라인이면 닉네임 업데이트
+      if userNode.Text <> nick then
+        userNode.Text := nick;
+    end
+
+[3. 그룹 관리 개선]
+
+  현재: 빈 그룹(모든 사용자 오프라인) 계속 표시
+  개선: 빈 그룹 자동 삭제
+
+  구현:
+    if (userNode <> nil) And (Status = 'offline') then
+    begin
+      userNode.Delete;
+
+      // 그룹에 사용자 없으면 그룹도 삭제
+      if node.GetFirstChild = nil then
+        node.Delete;
+    end
+
+[4. 사용자 상태 아이콘]
+
+  현재: 텍스트만 표시
+  개선: 온라인/오프라인 아이콘 표시
+
+  구현:
+    - ImageList 추가
+    - TreeView1.Images 설정
+    - 노드 추가 시 ImageIndex 설정
+
+[5. 사용자 검색 기능]
+
+  현재: 수동으로 TreeView 스크롤
+  개선: 사용자 검색 입력창 추가
+
+  구현:
+    - Edit 컴포넌트 추가
+    - OnChange 이벤트에서 TreeView 필터링
+
+================================================================================
+  END OF SPEC_USERLIST.txt
+================================================================================

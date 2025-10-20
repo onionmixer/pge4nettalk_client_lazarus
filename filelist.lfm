@@ -1,14 +1,14 @@
 object FormFileList: TFormFileList
-  Left = 716
+  Left = 2177
   Height = 240
-  Top = 132
+  Top = 328
   Width = 327
   AllowDropFiles = True
   Caption = 'File List'
   ClientHeight = 240
   ClientWidth = 327
+  LCLVersion = '4.2.0.0'
   OnDropFiles = FormDropFiles
-  LCLVersion = '1.4.4.0'
   object ListView1: TListView
     Left = 8
     Height = 190
@@ -43,8 +43,8 @@ object FormFileList: TFormFileList
     Width = 75
     Anchors = [akRight, akBottom]
     Caption = 'Upload'
-    OnClick = ButtonUploadClick
     TabOrder = 1
+    OnClick = ButtonUploadClick
   end
   object ButtonDelete: TButton
     Left = 167
@@ -53,8 +53,8 @@ object FormFileList: TFormFileList
     Width = 75
     Anchors = [akRight, akBottom]
     Caption = 'Delete'
-    OnClick = ButtonDeleteClick
     TabOrder = 2
+    OnClick = ButtonDeleteClick
   end
   object ButtonRefresh: TButton
     Left = 247
@@ -63,8 +63,8 @@ object FormFileList: TFormFileList
     Width = 75
     Anchors = [akRight, akBottom]
     Caption = 'Refresh'
-    OnClick = ButtonRefreshClick
     TabOrder = 3
+    OnClick = ButtonRefreshClick
   end
   object ButtonShare: TButton
     Left = 7
@@ -73,11 +73,11 @@ object FormFileList: TFormFileList
     Width = 75
     Anchors = [akRight, akBottom]
     Caption = 'Share'
-    OnClick = ButtonShareClick
     TabOrder = 4
+    OnClick = ButtonShareClick
   end
   object OpenDialog1: TOpenDialog
-    left = 127
-    top = 94
+    Left = 127
+    Top = 94
   end
 end

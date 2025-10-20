@@ -5,7 +5,7 @@ unit main;
 interface
 
 uses
-  Classes, SysUtils, FileUtil, Forms, Controls, Graphics, Dialogs, Menus,
+  Classes, SysUtils, Forms, Controls, Graphics, Dialogs, Menus,
   ComCtrls, StdCtrls, ExtCtrls, Contnrs, syncobjs, LMessages,
   ChatLabel, OZFTwistedKnot, OZFTwistedKnotStream, OZFTwistedKnotPacket,
   flcDataStructs, NetworkInterface, chat, hash;
@@ -62,7 +62,6 @@ type
     procedure OnNetworkEvent(var Msg: TLMessage); message NI_EVENT;
     procedure OnStatus(var Msg: TLMessage); message NI_STATUS;
     procedure OnTalkTo(Receiver: TOZFTwistedKnotStream);
-    procedure OnSession(Receiver: TOZFTwistedKnotStream);
     procedure OnCargoCompany(Receiver: TOZFTwistedKnotStream);
     procedure UpdateUserInfo(User, Nick, Group, Status, Image: String);
     procedure ChatCloseAll;
@@ -99,8 +98,8 @@ implementation
 
 uses
   login, filelist,
-  LCLType, IniFiles, DateUtils, LazFileUtils, LazUTF8Classes, flcHash,
-  OZFBlahBlah, OZFMinions, OZFCargoCompany;
+  LCLType, IniFiles, DateUtils, LazUTF8, FileUtil, flcHash,
+  OZFBlahBlah, OZFCargoCompany;
 
 { TFormMain }
 
@@ -123,14 +122,14 @@ begin
   OnGetApplicationName := @GetAppName;
   try
     fConfigFile := GetAppConfigDir(False);
-    if not DirectoryExistsUTF8(fConfigFile) then
+    if not DirectoryExists(fConfigFile) then
       MkDir(fConfigFile);
-    fConfigFile := fConfigFile + 'blahblah.ini';
+    fConfigFile := fConfigFile + 'pge4nettalk.ini';
   finally
     OnGetApplicationName := OldGetAppName;
   end;
   {$ELSE}
-  fConfigFile := ExpandFileName('~/.blahblah.conf');
+  fConfigFile := ExpandFileName('~/.pge4nettalk.conf');
   {$ENDIF}
 
   fNetworkStatus := OZFTwistedKnotStatusDisconnect;
@@ -355,9 +354,7 @@ begin
         continue;
       end;
 
-      if Stream.Address = OZFMinionsID then
-        OnSession(Stream)
-      else if Stream.Address = OZFBlahBlahID then
+      if Stream.Address = OZFBlahBlahID then
         OnTalkTo(Stream)
       else if Stream.Address = OZFCargoCompanyID then
         OnCargoCompany(Stream);
@@ -417,30 +414,64 @@ begin
   end
   else if tt.functionID = OZFBlahBlahFunctionIDAuth then
   begin
-    fAuth := True;
-    fUser := tt.args[0];
-    MenuConnect.Caption := 'Dis&connect';
-    MenuFileList.Enabled := True;
-    FormLogin.Hide;
-    FormFileList.ButtonRefreshClick(nil);
-    date := Now;
+    if tt.errorCode = OZFBlahBlahErrorCodeNone then
+    begin
+      // 로그인 성공
+      fAuth := True;
+      fUser := tt.args[0];
+      MenuConnect.Caption := 'Dis&connect';
+      MenuFileList.Enabled := True;
+      FormLogin.Hide;
+      FormFileList.ButtonRefreshClick(nil);
+      date := Now;
 
-    Config := TIniFile.Create(fConfigFile);
-    Config.WriteString('Login', 'Date', FormatDateTime('yy-mm-dd', date));
-    Config.WriteString('Login', 'Time', FormatDateTime('hh:nn:ss', date));
-    Config.Free;
+      Config := TIniFile.Create(fConfigFile);
+      Config.WriteString('Login', 'Date', FormatDateTime('yy-mm-dd', date));
+      Config.WriteString('Login', 'Time', FormatDateTime('hh:nn:ss', date));
+      Config.Free;
+    end
+    else
+    begin
+      // 로그인 실패
+      FormLogin.Show;
+      FormLogin.Fail;
+    end;
   end
   else if tt.functionID = OZFBlahBlahFunctionIDStat then
   begin
+    WriteLn('[DEBUG] STAT received, args count: ', tt.args.Count);
+    if tt.args.Count >= 1 then WriteLn('[DEBUG] STAT arg[0] (user): "', tt.args[0], '"');
+    if tt.args.Count >= 2 then WriteLn('[DEBUG] STAT arg[1] (nick): "', tt.args[1], '"');
+    if tt.args.Count >= 3 then WriteLn('[DEBUG] STAT arg[2] (group): "', tt.args[2], '"');
+
     user := tt.args[0];
     nick := tt.args[1];
     group := tt.args[2];
-    status := tt.args[3];
-    image := tt.args[4];
+
+    // Handle optional args (status, image)
+    if tt.args.Count >= 4 then
+      status := tt.args[3]
+    else
+      status := 'online';  // Default to online if not provided
+
+    if tt.args.Count >= 5 then
+      image := tt.args[4]
+    else
+      image := '';
+
+    WriteLn('[DEBUG] STAT: user=', user, ', nick=', nick, ', group=', group, ', status=', status);
+
     if status <> 'offline' then
-      fNickList[user] := nick
+    begin
+      fNickList[user] := nick;
+      WriteLn('[DEBUG] Added to NickList: ', user, ' -> ', nick);
+    end
     else if fNickList.HasKey(User) then
+    begin
       fNickList.Delete(user);
+      WriteLn('[DEBUG] Removed from NickList: ', user);
+    end;
+
     updateUserInfo(user, nick, group, status, image);
     if user = fUser then
       Caption := 'BlahBlah - ' + nick;
@@ -505,35 +536,12 @@ begin
     FreeAndNil(tt);
 end;
 
-procedure TFormMain.OnSession(Receiver: TOZFTwistedKnotStream);
-var
-  response: TOZFMinions;
-  tt: TOZFBlahBlah;
-begin
-  response := TOZFMinions.Create(Receiver.Buffer, Receiver.Length);
-  if response.functionID = OZFMinionsFunctionIDResponse then
-  begin
-    if response.errorCode = OZFMinionsErrorCodeNone then
-    begin
-      tt := TOZFBlahBlah.Create;
-      tt.functionID := OZFBlahBlahFunctionIDAuth;
-      SendData(tt, OZFBlahBlahID);
-      tt.Free;
-    end
-    else
-    begin
-      FormLogin.Show;
-      FormLogin.Fail;
-    end;
-  end;
-end;
-
 procedure TFormMain.OnCargoCompany(Receiver: TOZFTwistedKnotStream);
 var
   tt: TOZFBlahBlah;
   cargo, response: TOZFCargoCompany;
-  fsIn: TFileStreamUTF8;
-  fsOut: TFileStreamUTF8;
+  fsIn: TFileStream;
+  fsOut: TFileStream;
   list: TListView;
   item: TListItem;
   i, cut: Integer;
@@ -575,7 +583,7 @@ begin
       data := nil;
 
       try
-        fsIn := TFileStreamUTF8.Create(filename, fmOpenRead);
+        fsIn := TFileStream.Create(filename, fmOpenRead);
         fsIn.Seek(cargo.Position, soBeginning);
         size := fsIn.Size - cargo.Position;
         if size > 1024*1024 then
@@ -634,10 +642,10 @@ begin
       cont := True;
 
       try
-        if FileExistsUTF8(filename) then
-          fsOut := TFileStreamUTF8.Create(filename, fmOpenWrite)
+        if FileExists(filename) then
+          fsOut := TFileStream.Create(filename, fmOpenWrite)
         else
-          fsOut := TFileStreamUTF8.Create(filename, fmCreate);
+          fsOut := TFileStream.Create(filename, fmCreate);
 
         if fsOut.Size < cargo.Position then
         begin
@@ -883,18 +891,25 @@ var
   userNode: TTreeNode;
   newGroup: Boolean;
   userSeq: Integer;
+  displayGroup: String;
 begin
   if (User = '') or (Nick = '') or (Group = '') then
     exit;
 
+  // Change "Group" to "Users" for display
+  if Group = 'Group' then
+    displayGroup := 'Users'
+  else
+    displayGroup := Group;
+
   newGroup := False;
-  node := TreeView1.Items.FindTopLvlNode(group);
+  node := TreeView1.Items.FindTopLvlNode(displayGroup);
   if node = nil then
   begin
     if (Status = 'offline') then
       exit;
     newGroup := True;
-    node := TreeView1.Items.Add(nil, group);
+    node := TreeView1.Items.Add(nil, displayGroup);
   end;
 
   userSeq := StrToInt(user);
@@ -920,15 +935,15 @@ end;
 
 procedure TFormMain.SignIn(User: String; Password: String);
 var
-  request: TOZFMinions;
+  request: TOZFBlahBlah;
 begin
-  request := TOZFMinions.Create;
-  request.functionID := OZFMinionsFunctionIDSignIn;
-  request.errorCode := OZFMinionsErrorCodeNone;
-  request.identifier := User;
-  request.Password := Password;
-  request.useNickname := False;
-  SendData(request, OZFMinionsID);
+  request := TOZFBlahBlah.Create;
+  request.functionID := OZFBlahBlahFunctionIDAuth;
+  request.errorCode := OZFBlahBlahErrorCodeNone;
+  request.args := TStringList.Create;
+  request.args.Add(User);      // Arg 0: user_id
+  request.args.Add(Password);  // Arg 1: password
+  SendData(request, OZFBlahBlahID);
   request.Free;
 end;
 
@@ -1099,9 +1114,16 @@ end;
 function TFormMain.GetNick(User: String): String;
 begin
   if fNickList.HasKey(User) then
-    Result := fNickList[User]
+  begin
+    Result := fNickList[User];
+    WriteLn('[DEBUG] GetNick: Found "', User, '" -> "', Result, '"');
+  end
   else
-    Result := User;
+  begin
+    // Debug: User not found in NickList
+    WriteLn('[DEBUG] GetNick: User "', User, '" NOT FOUND in NickList (count: ', fNickList.Count, ')');
+    Result := User;  // ID를 그대로 반환
+  end;
 end;
 
 procedure TFormMain.AddUpload(Target, FileName: String);
@@ -1162,19 +1184,19 @@ begin
   if SaveDialog1.Execute then
   begin
     download := SaveDialog1.FileName;
-    if FileExistsUTF8(download) then
+    if FileExists(download) then
     begin
       if Application.MessageBox('Resume download?', 'Resume', MB_YESNO) = IDYES then
-        nextpos := FileSizeUTF8(download);
+        nextpos := FileUtil.FileSize(download);
     end;
   end;
 
   if download = '' then
     exit;
 
-  if (nextpos = 0) and FileExistsUTF8(download) then
+  if (nextpos = 0) and FileExists(download) then
   begin
-    DeleteFileUTF8(download);
+    DeleteFile(download);
   end;
 
   cargo := TOZFCargoCompany.Create;
@@ -1251,19 +1273,19 @@ begin
     md5 := Copy(sha256, 1, cut - 1);
     Delete(sha256, 1, cut);
 
-    if not FileExistsUTF8(upload) then
+    if not FileExists(upload) then
     begin
       Application.MessageBox('File not found', 'Confirm', MB_ICONERROR);
       continue;
     end;
 
-    if DirectoryExistsUTF8(upload) then
+    if DirectoryExists(upload) then
     begin
       Application.MessageBox('Invalid file', 'Confirm', MB_ICONERROR);
       continue;
     end;
 
-    filesize := FileSizeUTF8(upload);
+    filesize := FileUtil.FileSize(upload);
 
     cargo := TOZFCargoCompany.Create;
     cargo.Command := OZFCargoCompanyFunctionIDUploadRequest;

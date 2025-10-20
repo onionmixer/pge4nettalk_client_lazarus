@@ -1,13 +1,13 @@
 object FormInvite: TFormInvite
-  Left = 472
+  Left = 2356
   Height = 240
-  Top = 145
+  Top = 241
   Width = 320
   Caption = 'Invite'
   ClientHeight = 240
   ClientWidth = 320
+  LCLVersion = '4.2.0.0'
   OnClose = FormClose
-  LCLVersion = '1.2.6.0'
   object ListBoxUsers: TListBox
     Left = 8
     Height = 192
@@ -27,8 +27,8 @@ object FormInvite: TFormInvite
     Width = 75
     Anchors = [akRight, akBottom]
     Caption = 'Cancel'
-    OnClick = ButtonCancelClick
     TabOrder = 1
+    OnClick = ButtonCancelClick
   end
   object ButtonInvite: TButton
     Left = 157
@@ -37,7 +37,7 @@ object FormInvite: TFormInvite
     Width = 75
     Anchors = [akRight, akBottom]
     Caption = 'Invite'
-    OnClick = ButtonInviteClick
     TabOrder = 2
+    OnClick = ButtonInviteClick
   end
 end

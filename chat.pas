@@ -406,6 +406,8 @@ begin
     from := tt.args[1];
     message := tt.args[2];
 
+    WriteLn('[DEBUG] MESSAGE received: target="', target, '", from="', from, '", message="', message, '"');
+
     if message = '' then
       exit;
 
@@ -413,15 +415,15 @@ begin
 
     if (from = fFromID) then
     begin
-      textAlign := rvalLeft;
-      Chat.Skin := FormMain.LeftSkin;
-      Chat.LeftSide := True;
-    end
-    else
-    begin
       textAlign := rvalRight;
       Chat.Skin := FormMain.RightSkin;
       Chat.LeftSide := False;
+    end
+    else
+    begin
+      textAlign := rvalLeft;
+      Chat.Skin := FormMain.LeftSkin;
+      Chat.LeftSide := True;
     end;
     Chat.SelectSkin := FormMain.SelectSkin;
     Chat.SelectColor := $7ED3FF;
@@ -494,11 +496,11 @@ var
 begin
   if (from = fFromID) then
   begin
-    textAlign := rvalLeft;
+    textAlign := rvalRight;
   end
   else
   begin
-    textAlign := rvalRight;
+    textAlign := rvalLeft;
   end;
 
   date := UnixToDateTime(expire);
