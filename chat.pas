@@ -78,7 +78,7 @@ implementation
 uses
   main, invite, filelist,
   LazFileUtils, LCLType, DateUtils,
-  ChatLabel;
+  ChatLabel, logger;
 
 { TFormChat }
 
@@ -406,7 +406,9 @@ begin
     from := tt.args[1];
     message := tt.args[2];
 
-    WriteLn('[DEBUG] MESSAGE received: target="', target, '", from="', from, '", message="', message, '"');
+    {$IFDEF DEBUG}
+    LogDebug('MESSAGE received: target="%s", from="%s", message="%s"', [target, from, message]);
+    {$ENDIF}
 
     if message = '' then
       exit;

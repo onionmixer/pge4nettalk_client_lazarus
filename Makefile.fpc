@@ -1,0 +1,27 @@
+#
+# Makefile.fpc for pge4nettalk_client_lazarus
+#
+
+[package]
+name=pge4nettalk_client_lazarus
+version=1.0.0
+
+[target]
+programs=pge4nettalk_client_lazarus
+
+[compiler]
+unitdir=ozapi_pascal fundamentals/Utils lazrichview
+includedir=.
+targetdir=.
+
+[clean]
+files=$(wildcard *$(OEXT)) $(wildcard *$(PPUEXT)) $(wildcard *$(RSTEXT))
+
+[install]
+fpcpackage=n
+
+[default]
+fpcdir=.
+
+[rules]
+.NOTPARALLEL:

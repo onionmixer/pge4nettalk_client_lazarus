@@ -99,7 +99,7 @@ implementation
 uses
   login, filelist,
   LCLType, IniFiles, DateUtils, LazUTF8, FileUtil, flcHash,
-  OZFBlahBlah, OZFCargoCompany;
+  OZFBlahBlah, OZFCargoCompany, logger;
 
 { TFormMain }
 
@@ -439,10 +439,12 @@ begin
   end
   else if tt.functionID = OZFBlahBlahFunctionIDStat then
   begin
-    WriteLn('[DEBUG] STAT received, args count: ', tt.args.Count);
-    if tt.args.Count >= 1 then WriteLn('[DEBUG] STAT arg[0] (user): "', tt.args[0], '"');
-    if tt.args.Count >= 2 then WriteLn('[DEBUG] STAT arg[1] (nick): "', tt.args[1], '"');
-    if tt.args.Count >= 3 then WriteLn('[DEBUG] STAT arg[2] (group): "', tt.args[2], '"');
+    {$IFDEF DEBUG}
+    LogDebug('STAT received, args count: %d', [tt.args.Count]);
+    if tt.args.Count >= 1 then LogDebug('STAT arg[0] (user): "%s"', [tt.args[0]]);
+    if tt.args.Count >= 2 then LogDebug('STAT arg[1] (nick): "%s"', [tt.args[1]]);
+    if tt.args.Count >= 3 then LogDebug('STAT arg[2] (group): "%s"', [tt.args[2]]);
+    {$ENDIF}
 
     user := tt.args[0];
     nick := tt.args[1];
@@ -459,17 +461,23 @@ begin
     else
       image := '';
 
-    WriteLn('[DEBUG] STAT: user=', user, ', nick=', nick, ', group=', group, ', status=', status);
+    {$IFDEF DEBUG}
+    LogDebug('STAT: user=%s, nick=%s, group=%s, status=%s', [user, nick, group, status]);
+    {$ENDIF}
 
     if status <> 'offline' then
     begin
       fNickList[user] := nick;
-      WriteLn('[DEBUG] Added to NickList: ', user, ' -> ', nick);
+      {$IFDEF DEBUG}
+      LogDebug('Added to NickList: %s -> %s', [user, nick]);
+      {$ENDIF}
     end
     else if fNickList.HasKey(User) then
     begin
       fNickList.Delete(user);
-      WriteLn('[DEBUG] Removed from NickList: ', user);
+      {$IFDEF DEBUG}
+      LogDebug('Removed from NickList: %s', [user]);
+      {$ENDIF}
     end;
 
     updateUserInfo(user, nick, group, status, image);
@@ -1116,12 +1124,15 @@ begin
   if fNickList.HasKey(User) then
   begin
     Result := fNickList[User];
-    WriteLn('[DEBUG] GetNick: Found "', User, '" -> "', Result, '"');
+    {$IFDEF DEBUG}
+    LogDebug('GetNick: Found "%s" -> "%s"', [User, Result]);
+    {$ENDIF}
   end
   else
   begin
-    // Debug: User not found in NickList
-    WriteLn('[DEBUG] GetNick: User "', User, '" NOT FOUND in NickList (count: ', fNickList.Count, ')');
+    {$IFDEF DEBUG}
+    LogDebug('GetNick: User "%s" NOT FOUND in NickList (count: %d)', [User, fNickList.Count]);
+    {$ENDIF}
     Result := User;  // ID를 그대로 반환
   end;
 end;
