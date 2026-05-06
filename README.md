@@ -62,7 +62,7 @@ ulimit -c unlimited
 
 - `*.pas`, `*.lpr`: Pascal 소스 파일
 - `logger.pas`: 로깅 유틸리티 모듈
-- `ozapi_pascal/`: ozapi 서브모듈
+- `../../00_common/ozapi_pascal/`: 공통 ozapi Pascal 라이브러리
 - `fundamentals/`: Fundamentals 라이브러리
 - `lazrichview/`: RichView 컴포넌트
 - `build.sh`: 빌드 스크립트

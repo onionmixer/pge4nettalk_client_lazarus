@@ -158,7 +158,7 @@ begin
       fConnection.Ping;
       fConnection.RetryDelayed;
 
-      if SecondsBetween(Now, fConnection.LastReceived) > 60 then
+      if fConnection.lastReceivedTimeIntervalSinceNow(0) > 60 then
       begin
         fConnection.Connect;
       end;
@@ -172,7 +172,7 @@ end;
 
 function TNetworkInterface.getConnected: Boolean;
 begin
-  Result := fConnection.Connected and fConnection.Handshaked;
+  Result := fConnection.Connected;
 end;
 
 constructor TNetworkInterface.Create;
@@ -184,8 +184,7 @@ begin
 
   fConnection := TOZFTwistedKnot.Create;
   fConnection.PublicKey := PublicKey;
-  fConnection.Address := ServerHost;
-  fConnection.Port := ServerPort;
+  fConnection.setServerAddress(ServerHost, ServerPort);
   fConnection.Handler := self;
   fConnection.Start;
 
@@ -234,7 +233,7 @@ end;
 procedure TNetworkInterface.send(Data: Pointer; Len: Integer; UniqueID,
   toAddress: DWord);
 begin
-  fConnection.Send(Data, Len, UniqueID, toAddress);
+  fConnection.Send(Data, Len, UniqueID, toAddress, 0);
 end;
 
 function TNetworkInterface.querySendProgress(Address, StreamID: DWord): DWord;
@@ -321,4 +320,3 @@ begin
 end;
 
 end.
-

@@ -1,3 +1,0 @@
-[submodule "ozapi_pascal"]
-	path = ozapi_pascal
-	url = ssh://git@developer.steeloz.net:28/ozapi_pascal.git

@@ -98,7 +98,7 @@
     </Target>
     <SearchPaths>
       <IncludeFiles Value="$(ProjOutDir)"/>
-      <OtherUnitFiles Value="ozapi_pascal;fundamentals\Utils;lazrichview"/>
+      <OtherUnitFiles Value="..\..\00_common\ozapi_pascal;fundamentals\Utils;lazrichview"/>
       <UnitOutputDirectory Value="lib\$(TargetCPU)-$(TargetOS)"/>
     </SearchPaths>
     <CodeGeneration>
